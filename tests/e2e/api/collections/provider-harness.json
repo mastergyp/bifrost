@@ -176328,6 +176328,162 @@
           }
         }
       ]
+    },
+    {
+      "name": "127. Explicit output ceiling (#6132)",
+      "description": "Regression for the separate sub-16 ceiling inflation described in #6132. Requires a configured vLLM key serving Qwen/Qwen3-0.6B (the native provider test default). Chat legacy cap and native Responses cap, unary and SSE, must remain hard upper bounds; every unexpected HTTP or SSE error fails. No cloud credentials or production keys are embedded.",
+      "item": [
+        {
+          "name": "vLLM Qwen3 explicit output ceiling chat unary - #6132",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.expect(pm.response.code, pm.response.text()).to.eql(200); });",
+                  "var usage = pm.response.json().usage;",
+                  "pm.test('explicit output ceiling is honored', function () { pm.expect(usage, pm.response.text()).to.be.an('object'); pm.expect(usage.completion_tokens, pm.response.text()).to.be.above(0); pm.expect(usage.completion_tokens, pm.response.text()).to.be.at.most(1); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"vllm/Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"Print all integers from 1 to 100 separated by commas. Do not stop early.\"}],\"max_tokens\":1,\"stream\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/chat/completions"
+          },
+          "response": []
+        },
+        {
+          "name": "vLLM Qwen3 explicit output ceiling chat streaming - #6132",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.expect(pm.response.code, pm.response.text()).to.eql(200); });",
+                  "var frames = pm.response.text().split(/\\r?\\n/).filter(function (l) { return l.indexOf('data: ') === 0 && l !== 'data: [DONE]'; }).map(function (l) { return JSON.parse(l.slice(6)); });",
+                  "pm.test('no SSE error event', function () { pm.expect(frames.some(function (f) { return f.error || f.type === 'error'; }), pm.response.text()).to.eql(false); });",
+                  "var finals = frames.filter(function (f) { return f.usage; });",
+                  "var usage = finals.length ? finals[finals.length - 1].usage : null;",
+                  "pm.test('explicit output ceiling is honored', function () { pm.expect(usage, pm.response.text()).to.be.an('object'); pm.expect(usage.completion_tokens, pm.response.text()).to.be.above(0); pm.expect(usage.completion_tokens, pm.response.text()).to.be.at.most(8); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"vllm/Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"Print all integers from 1 to 100 separated by commas. Do not stop early.\"}],\"max_tokens\":8,\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/chat/completions"
+          },
+          "response": []
+        },
+        {
+          "name": "vLLM Qwen3 explicit output ceiling responses unary - #6132",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.expect(pm.response.code, pm.response.text()).to.eql(200); });",
+                  "var usage = pm.response.json().usage;",
+                  "pm.test('explicit output ceiling is honored', function () { pm.expect(usage, pm.response.text()).to.be.an('object'); pm.expect(usage.output_tokens, pm.response.text()).to.be.above(0); pm.expect(usage.output_tokens, pm.response.text()).to.be.at.most(8); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"vllm/Qwen/Qwen3-0.6B\",\"input\":\"Print all integers from 1 to 100 separated by commas. Do not stop early.\",\"max_output_tokens\":8,\"stream\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/responses"
+          },
+          "response": []
+        },
+        {
+          "name": "vLLM Qwen3 explicit output ceiling responses streaming - #6132",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.expect(pm.response.code, pm.response.text()).to.eql(200); });",
+                  "var frames = pm.response.text().split(/\\r?\\n/).filter(function (l) { return l.indexOf('data: ') === 0 && l !== 'data: [DONE]'; }).map(function (l) { return JSON.parse(l.slice(6)); });",
+                  "pm.test('no SSE error event', function () { pm.expect(frames.some(function (f) { return f.error || f.type === 'error'; }), pm.response.text()).to.eql(false); });",
+                  "var finals = frames.filter(function (f) { return f.response && f.response.usage; });",
+                  "var usage = finals.length ? finals[finals.length - 1].response.usage : null;",
+                  "pm.test('explicit output ceiling is honored', function () { pm.expect(usage, pm.response.text()).to.be.an('object'); pm.expect(usage.output_tokens, pm.response.text()).to.be.above(0); pm.expect(usage.output_tokens, pm.response.text()).to.be.at.most(15); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"vllm/Qwen/Qwen3-0.6B\",\"input\":\"Print all integers from 1 to 100 separated by commas. Do not stop early.\",\"max_output_tokens\":15,\"stream\":true}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/responses"
+          },
+          "response": []
+        }
+      ]
     }
   ]
 }

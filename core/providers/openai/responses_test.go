@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -11,6 +12,34 @@ import (
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/stretchr/testify/require"
 )
+
+func TestToOpenAIResponsesRequest_PreservesExplicitOutputCeiling(t *testing.T) {
+	for _, provider := range []schemas.ModelProvider{schemas.OpenAI, schemas.VLLM, "private-provider"} {
+		for _, limit := range []*int{nil, schemas.Ptr(1), schemas.Ptr(8), schemas.Ptr(15), schemas.Ptr(16), schemas.Ptr(32)} {
+			name := "unset"
+			if limit != nil {
+				name = fmt.Sprint(*limit)
+			}
+			t.Run(string(provider)+"/"+name, func(t *testing.T) {
+				ctx, cancel := schemas.NewBifrostContextWithCancel(nil)
+				defer cancel()
+				if provider == "private-provider" {
+					ctx.SetValue(schemas.BifrostContextKeyIsCustomProvider, true)
+				}
+				request := &schemas.BifrostResponsesRequest{
+					Provider: provider, Model: "private-model",
+					Input: []schemas.ResponsesMessage{{Role: schemas.Ptr(schemas.ResponsesInputMessageRoleUser),
+						Content: &schemas.ResponsesMessageContent{ContentStr: schemas.Ptr("Count to fifty.")}}},
+					Params: &schemas.ResponsesParameters{MaxOutputTokens: limit},
+				}
+				got := ToOpenAIResponsesRequest(ctx, request)
+				require.NotNil(t, got)
+				require.Equal(t, limit, got.MaxOutputTokens, "an explicit upper bound must never be raised")
+				require.Equal(t, limit, request.Params.MaxOutputTokens, "conversion must not mutate the caller")
+			})
+		}
+	}
+}
 
 func TestToOpenAIResponsesRequest_ReasoningOnlyMessageSkip(t *testing.T) {
 	tests := []struct {

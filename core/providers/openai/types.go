@@ -14,6 +14,9 @@ import (
 	"github.com/tidwall/sjson"
 )
 
+// MinMaxCompletionTokens is retained for source compatibility.
+// Deprecated: provider conversion preserves explicit output ceilings; backend
+// minimums are validated by that backend rather than increasing the request.
 const MinMaxCompletionTokens = 16
 
 const MinReasoningMaxTokens = 1 // Minimum max tokens for reasoning - used for estimation of effort level
