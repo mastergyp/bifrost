@@ -1,4 +1,4 @@
-# Same v2.2.4 source/runtime; only explicit-output-ceiling conversion is patched.
+# Pinned v2.2.4 runtime; preserve explicit output ceilings and live governance.
 FROM node:25-alpine3.23@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS ui-builder
 WORKDIR /app
 COPY ui/package*.json ./
@@ -29,6 +29,8 @@ RUN go work init && go work use ./core ./framework ./transports && \
 RUN cd core && go mod download all
 RUN --network=none cd core && go test -p 2 -parallel 4 -json ./providers/... > /build/provider-tests.jsonl || \
     { tail -c 20000 /build/provider-tests.jsonl; exit 1; }
+RUN --network=none cd plugins/governance && go test -p 2 -parallel 4 -json . > /build/governance-tests.jsonl || \
+    { tail -c 20000 /build/governance-tests.jsonl; exit 1; }
 COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
 ARG SOURCE_REVISION
 RUN test -n "$SOURCE_REVISION" && cd transports && \

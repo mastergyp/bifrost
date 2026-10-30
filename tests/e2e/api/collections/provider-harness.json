@@ -176484,6 +176484,164 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "128. VK rate window survives activation reload (PR #1)",
+      "description": "API-created fixture-only vLLM key: one completed request consumes its one-request window, then disable/re-enable reloads the scoped model config. The second ordinary/SSE request must remain 429. A lagging DB reset timestamp must not forgive live usage. Each case deletes only its own key; requires the development harness management API.",
+      "item": [
+        {
+          "name": "vLLM Qwen3 VK rate window survives activation unary - PR #1",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var BASE = pm.variables.get('baseUrl');",
+                  "pm.variables.unset('rateWindowVK'); pm.variables.unset('rateWindowVKID');",
+                  "function call(method,path,body,cb) {",
+                  "  var req={url:BASE+path,method:method,header:{'Content-Type':'application/json'}};",
+                  "  if (body !== null) { req.body={mode:'raw',raw:JSON.stringify(body)}; }",
+                  "  pm.sendRequest(req,function(err,res) {",
+                  "    pm.test('governance fixture reached '+method+' '+path,function() { pm.expect(err).to.eql(null); });",
+                  "    if (err) { return; }",
+                  "    pm.test('governance fixture status '+method+' '+path,function() { pm.expect(res.code,'status='+res.code).to.eql(200); });",
+                  "    if (res.code !== 200) { return; }",
+                  "    cb(res.json());",
+                  "  });",
+                  "}",
+                  "call('POST','/api/governance/virtual-keys',{name:'harness-rate-window-'+pm.variables.replaceIn('{{$guid}}'),is_active:true,allow_all_providers:false,provider_configs:[{provider:'vllm',allowed_models:['Qwen/Qwen3-0.6B'],key_ids:['*'],weight:1}],rate_limit:{request_max_limit:1,request_reset_duration:'1h'}},function(created) {",
+                  "  var vk=created.virtual_key; pm.variables.set('rateWindowVK',vk.value); pm.variables.set('rateWindowVKID',vk.id);",
+                  "  var body=JSON.parse(pm.variables.replaceIn(pm.request.body.raw));",
+                  "  pm.sendRequest({url:BASE+'/openai/v1/chat/completions',method:'POST',header:{'Content-Type':'application/json','x-bf-vk':vk.value},body:{mode:'raw',raw:JSON.stringify(body)}},function(err,res) {",
+                  "    pm.test('first counted inference succeeds',function() { pm.expect(err).to.eql(null); pm.expect(res && res.code,res ? res.text() : 'no response').to.eql(200); });",
+                  "    if (err || res.code !== 200) { return; }",
+                  "    var endpoint='/api/governance/virtual-keys/'+vk.id;",
+                  "    call('PUT',endpoint,{is_active:false},function(disabled) {",
+                  "      pm.test('fixture key disabled',function() { pm.expect(disabled.virtual_key.is_active).to.eql(false); });",
+                  "      call('PUT',endpoint,{is_active:true},function(enabled) {",
+                  "        pm.test('same fixture key reenabled',function() { pm.expect(enabled.virtual_key.is_active).to.eql(true); pm.expect(enabled.virtual_key.value===vk.value).to.eql(true); });",
+                  "      });",
+                  "    });",
+                  "  });",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('counted request remains rate limited after VK reload',function() { pm.expect(pm.response.code,pm.response.text()).to.eql(429); });",
+                  "var id=pm.variables.get('rateWindowVKID');",
+                  "if (id) { pm.sendRequest({url:pm.variables.get('baseUrl')+'/api/governance/virtual-keys/'+id,method:'DELETE'},function(err,res) { pm.test('fixture key removed',function() { pm.expect(err).to.eql(null); pm.expect(res && res.code,'cleanup status').to.eql(200); }); }); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-bf-vk",
+                "value": "{{rateWindowVK}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"vllm/Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply OK.\"}],\"max_tokens\":16,\"stream\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/chat/completions"
+          },
+          "response": []
+        },
+        {
+          "name": "vLLM Qwen3 VK rate window survives activation stream - PR #1",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var BASE = pm.variables.get('baseUrl');",
+                  "pm.variables.unset('rateWindowVK'); pm.variables.unset('rateWindowVKID');",
+                  "function call(method,path,body,cb) {",
+                  "  var req={url:BASE+path,method:method,header:{'Content-Type':'application/json'}};",
+                  "  if (body !== null) { req.body={mode:'raw',raw:JSON.stringify(body)}; }",
+                  "  pm.sendRequest(req,function(err,res) {",
+                  "    pm.test('governance fixture reached '+method+' '+path,function() { pm.expect(err).to.eql(null); });",
+                  "    if (err) { return; }",
+                  "    pm.test('governance fixture status '+method+' '+path,function() { pm.expect(res.code,'status='+res.code).to.eql(200); });",
+                  "    if (res.code !== 200) { return; }",
+                  "    cb(res.json());",
+                  "  });",
+                  "}",
+                  "call('POST','/api/governance/virtual-keys',{name:'harness-rate-window-'+pm.variables.replaceIn('{{$guid}}'),is_active:true,allow_all_providers:false,provider_configs:[{provider:'vllm',allowed_models:['Qwen/Qwen3-0.6B'],key_ids:['*'],weight:1}],rate_limit:{request_max_limit:1,request_reset_duration:'1h'}},function(created) {",
+                  "  var vk=created.virtual_key; pm.variables.set('rateWindowVK',vk.value); pm.variables.set('rateWindowVKID',vk.id);",
+                  "  var body=JSON.parse(pm.variables.replaceIn(pm.request.body.raw));",
+                  "  pm.sendRequest({url:BASE+'/openai/v1/chat/completions',method:'POST',header:{'Content-Type':'application/json','x-bf-vk':vk.value},body:{mode:'raw',raw:JSON.stringify(body)}},function(err,res) {",
+                  "    pm.test('first counted inference succeeds',function() { pm.expect(err).to.eql(null); pm.expect(res && res.code,res ? res.text() : 'no response').to.eql(200); });",
+                  "    if (err || res.code !== 200) { return; }",
+                  "    var endpoint='/api/governance/virtual-keys/'+vk.id;",
+                  "    call('PUT',endpoint,{is_active:false},function(disabled) {",
+                  "      pm.test('fixture key disabled',function() { pm.expect(disabled.virtual_key.is_active).to.eql(false); });",
+                  "      call('PUT',endpoint,{is_active:true},function(enabled) {",
+                  "        pm.test('same fixture key reenabled',function() { pm.expect(enabled.virtual_key.is_active).to.eql(true); pm.expect(enabled.virtual_key.value===vk.value).to.eql(true); });",
+                  "      });",
+                  "    });",
+                  "  });",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('counted request remains rate limited after VK reload',function() { pm.expect(pm.response.code,pm.response.text()).to.eql(429); });",
+                  "var id=pm.variables.get('rateWindowVKID');",
+                  "if (id) { pm.sendRequest({url:pm.variables.get('baseUrl')+'/api/governance/virtual-keys/'+id,method:'DELETE'},function(err,res) { pm.test('fixture key removed',function() { pm.expect(err).to.eql(null); pm.expect(res && res.code,'cleanup status').to.eql(200); }); }); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-bf-vk",
+                "value": "{{rateWindowVK}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"vllm/Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply OK.\"}],\"max_tokens\":16,\"stream\":true}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/chat/completions"
+          },
+          "response": []
+        }
+      ]
     }
   ]
 }
