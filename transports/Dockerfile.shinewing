@@ -19,7 +19,8 @@ RUN go work init && go work use ./core ./framework ./transports && \
       if [ -f "$plugin_dir/go.mod" ]; then go work use "$plugin_dir" || exit 1; fi; \
     done
 # No cloud credentials, production data, model mounts or runtime configuration.
-RUN cd core && go test -p 2 -parallel 4 -json ./providers/... > /build/provider-tests.jsonl
+RUN cd core && go test -p 2 -parallel 4 -json ./providers/... > /build/provider-tests.jsonl || \
+    { tail -c 20000 /build/provider-tests.jsonl; exit 1; }
 COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
 ARG SOURCE_REVISION
 RUN test -n "$SOURCE_REVISION" && cd transports && \
