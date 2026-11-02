@@ -1,0 +1,53 @@
+{
+  "active": 0,
+  "actual_application_start_control": true,
+  "actual_go_profile_loader": true,
+  "authority_missing_rejected": 409,
+  "durable_rejection_dispatch_races": 12,
+  "finished_rows": 13,
+  "glm_overflow_calls": 4,
+  "go_http_cases": 8,
+  "go_pre_ticket_rejection_replays": 4,
+  "managed_employee_gate_preserved": true,
+  "mock_inference_calls": 8,
+  "passed": true,
+  "qwen_calls": 4,
+  "real_gpu_or_user_credentials": false,
+  "schema": "planner_fixture_ae55d127dcfc4e20aede762d616d0e7e",
+  "schema_removed": true,
+  "socket_removed": true,
+  "synthetic_primary_hold_rows": 1,
+  "synthetic_race_dispatched_rows": 4,
+  "source_revisions": {
+    "gateway": "cf88c72da8d948224d72158d64dc852bd131b2be",
+    "bifrost": "56f99818ca04d7de6f5e435b33d61134fdfa8488"
+  },
+  "probe_sha256": "de1081017dbdd0d14a4c879156d8bb42ee9c52fc8d5120a5721fd1187ee442ff",
+  "host_platform": "Darwin x86_64",
+  "executor_sha256": "feece32311d17b0bd857caf9f84a936dce50a494511111ae316987575c6f10a8",
+  "owned_container_removed": true,
+  "owned_redis_removed": true,
+  "qualification_scope": "Native macOS application start_control + actual Bifrost HTTP/profile/governance; synthetic engine I/O; independent local PG/Redis",
+  "excluded": [
+    "public Gateway HTTP success with employee IdP/PG/Redis",
+    "Linux application image qualification",
+    "real GPU inference",
+    "production managed activation",
+    "durable employee financial reconciliation",
+    "auxiliary service-principal routing"
+  ],
+  "checks": {
+    "rust_clippy_all_targets": "passed",
+    "rust_actual_preparation_tests": 7,
+    "rust_registry_matching_mode_tests": 1,
+    "go_admission_module": "passed"
+  },
+  "previous_positive_fixture": {
+    "gateway_source": "3ba78922b6df006717bb4c01aac864e62b8161c1",
+    "bifrost_source": "e3d7ddd8350f8548ab7b4d50d1d9b3ae04f5ca0a",
+    "passed": true,
+    "mock_inference_calls": 8,
+    "finished_rows": 9,
+    "active": 0
+  }
+}

@@ -1,5 +1,15 @@
 # Shared physical admission protocol client
 
+2026-11-03 current: Gateway `cf88c72` now installs the actual Rust planner/sender;
+Bifrost `56f9981` requires its authority and durable-rejection handshake. The
+configured native/signed HTTP qualification passed 8 synthetic inference calls,
+4 pre-ticket rejection replays and 12 rejection/dispatch races with active=0.
+See [source-bound evidence](evidence/planned-execution-20261103.json) and the
+[Gateway integration and remaining activation gaps](https://github.com/mastergyp/shinewing-ai-gateway/blob/codex/model-overflow-routing/docs/PLANNED-EXECUTION-20261103.md).
+Production Bifrost/managed routing remains unchanged. This is not public Gateway
+employee-HTTP success, a Linux application image or real GPU qualification.
+Earlier sections below retain their historical scope.
+
 Current startup integration: the standalone HTTP server can now load the operator-owned managed profile after original governance. It requires exact controller authority and a Rust preparation capability that is not yet deployed; production automatic overflow remains off. See [startup contract and current limits](PROFILE-STARTUP-20261102.md). The following early candidate description is historical.
 
 Candidate client, authorization library and nullable HTTP runtime. The factory can

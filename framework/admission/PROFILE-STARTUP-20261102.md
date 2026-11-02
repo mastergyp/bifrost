@@ -1,5 +1,15 @@
 # Standalone managed-admission startup
 
+2026-11-03 current: Gateway `cf88c72` now installs the actual Rust planner/sender;
+Bifrost `56f9981` requires its authority and durable-rejection handshake. The
+configured native/signed HTTP qualification passed 8 synthetic inference calls,
+4 pre-ticket rejection replays and 12 rejection/dispatch races with active=0.
+See [source-bound evidence](evidence/planned-execution-20261103.json) and the
+[Gateway integration and remaining activation gaps](https://github.com/mastergyp/shinewing-ai-gateway/blob/codex/model-overflow-routing/docs/PLANNED-EXECUTION-20261103.md).
+Production Bifrost/managed routing remains unchanged. This is not public Gateway
+employee-HTTP success, a Linux application image or real GPU qualification.
+Earlier sections below retain their historical scope.
+
 `BIFROST_MANAGED_ADMISSION_CONFIG=/absolute/operator-owned/profile.json` now installs the existing Runtime and Producer from the normal HTTP server bootstrap, after the original governance plugin has loaded and before core initialization. No environment setting means the original native path. An explicitly empty, invalid or incompatible profile fails startup; it never silently falls back to uncontrolled physical dispatch.
 
 The separate [profile schema](profile.schema.json) describes this startup-only document; it is not a mutable UI/provider setting. The file must be a regular, non-symlink file, at most256KiB, without group/other write permission. Duplicate/unknown JSON fields and trailing documents are rejected. File identity is checked across open. Only `BIFROST_MANAGED_*` environment references may supply the independent native subject and delegation secrets; the loader does not create, rotate or print any user key/token. Original VK row IDs identify forwarding channels, not secret VK values. Subject material remains stable across restarts.
