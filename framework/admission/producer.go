@@ -34,6 +34,8 @@ type FrozenInput struct {
 	body []byte
 }
 
+func (FrozenInput) String() string      { return "managed inference input (redacted)" }
+func (i FrozenInput) GoString() string  { return i.String() }
 func (i FrozenInput) API() API          { return i.api }
 func (i FrozenInput) Size() int         { return len(i.body) }
 func (i FrozenInput) Reader() io.Reader { return bytes.NewReader(i.body) }

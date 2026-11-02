@@ -1236,3 +1236,12 @@ func TestPreparedTicketCannotStartAfterItsOriginalDeadline(t *testing.T) {
 		t.Fatalf("expired ticket attempted inference or lost cleanup: %v data=%d cancel=%d", err, data.Load(), cancels.Load())
 	}
 }
+
+func TestFrozenProducerInputDebugDoesNotExposeBody(t *testing.T) {
+	input := FrozenInput{api: Chat, body: []byte("private-prompt-image-content")}
+	for _, value := range []any{input, &input} {
+		if strings.Contains(fmt.Sprintf("%v %+v %#v", value, value, value), "private-prompt") {
+			t.Fatal("producer policy debug leaked model input")
+		}
+	}
+}
