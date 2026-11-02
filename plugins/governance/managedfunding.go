@@ -91,8 +91,11 @@ func (p *GovernancePlugin) CheckManagedTarget(ctx *schemas.BifrostContext, typ s
 	if unusablePermit(access) != nil || !access.IsModelAllowed(string(target.Provider), target.Model) {
 		return nil, managedFundingError(403, "selected managed target is not allowed")
 	}
-	if _, restricted := access.KeysForModel(string(target.Provider), target.Model); restricted {
-		return nil, managedFundingError(403, "restricted provider keys do not grant keyless managed execution")
+	// An empty list authorizes no named key, which is compatible with the
+	// registered keyless private backend. Existing private VKs use this shape.
+	// A nonempty named-key restriction must never be bypassed by that profile.
+	if keys, restricted := access.KeysForModel(string(target.Provider), target.Model); restricted && len(keys) != 0 {
+		return nil, managedFundingError(403, "named provider-key restrictions do not match keyless managed execution")
 	}
 	if spendingChecksSkipped(ctx) || bifrost.GetBoolFromContext(ctx, schemas.BifrostContextKeySkipVirtualKeyUsageTracking) {
 		return nil, managedFundingError(403, "managed target funding cannot skip checks or accounting")

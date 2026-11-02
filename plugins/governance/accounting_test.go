@@ -827,3 +827,12 @@ func TestManagedFundingStoreErrorCannotBeTreatedAsAllow(t *testing.T) {
 	assert.Nil(t, ctx.Value(managedFundingKey{}))
 	assert.Nil(t, ctx.Value(governanceRejectedContextKey))
 }
+
+func TestManagedFundingEmptyKeyScopePreservesKeylessPrivateAccess(t *testing.T) {
+	plugin, _, ctx := managedFundingFixture(t, schemas.ChatCompletionRequest)
+	ctx.Grant().SetAccess(grant.NewAccess([]schemas.Permit{grant.NewPermit(grant.PermitVirtualKey, "funding-vk-id", "existing keyless profile", true, false, []schemas.ProviderPermit{{Provider: "openai", AllowedModels: schemas.WhiteList{"*"}, KeyIDs: schemas.WhiteList{}}}, nil)}, nil, "", nil))
+	funding, denied := plugin.CheckManagedTarget(ctx, schemas.ChatCompletionRequest, schemas.Route{Provider: schemas.OpenAI, Model: "gpt-4o"}, time.Now().Add(time.Minute))
+	require.Nil(t, denied, "an allowed keyless model does not require a named provider key")
+	require.NotNil(t, funding)
+	require.Nil(t, funding.Bind(ctx))
+}

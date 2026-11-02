@@ -189,7 +189,7 @@ func exerciseConcreteCall(t *testing.T, control *admission.Client, pool string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := fixtureWithInner(t, false, true, producer, pool)
+	f := fixtureWithInner(t, false, true, producer, pool, fixtureRouting{keylessEmpty: true})
 	policy.governance = f.governance
 	base, client := ownedHTTP(t, f)
 	body := map[string]any{"model": "openai/" + model, "temperature": 0.25, "stream": stream}

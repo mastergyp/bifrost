@@ -139,8 +139,9 @@ func newFixture(t *testing.T, delegated bool, withRuntime ...bool) *fixture {
 }
 
 type fixtureRouting struct {
-	aliases []admission.NativeModelAlias
-	plugins []schemas.LLMPlugin
+	keylessEmpty bool
+	aliases      []admission.NativeModelAlias
+	plugins      []schemas.LLMPlugin
 }
 
 func fixtureWithInner(t *testing.T, delegated, useRuntime bool, inner schemas.ManagedInference, pool string, routing ...fixtureRouting) *fixture {
@@ -167,6 +168,9 @@ func fixtureWithInner(t *testing.T, delegated, useRuntime bool, inner schemas.Ma
 	budget := tables.TableBudget{ID: "original-budget", MaxLimit: 1000, ResetDuration: "1d", LastReset: now, CurrentUsage: 13.25, VirtualKeyID: new(vkID)}
 	rate := tables.TableRateLimit{ID: "original-rate", TokenMaxLimit: new(int64(1_000_000)), TokenResetDuration: new("1d"), TokenCurrentUsage: 37, TokenLastReset: now, RequestMaxLimit: new(int64(1000)), RequestResetDuration: new("1d"), RequestCurrentUsage: 4, RequestLastReset: now}
 	vk := tables.TableVirtualKey{ID: vkID, Name: "owned fixture", Value: *schemas.NewSecretVar(vkValue), IsActive: new(true), ProviderConfigs: []tables.TableVirtualKeyProviderConfig{{Provider: "openai", AllowedModels: schemas.WhiteList{model}, AllowAllKeys: true}}, Budgets: []tables.TableBudget{budget}, RateLimitID: new(rate.ID), RateLimit: &rate}
+	if options.keylessEmpty {
+		vk.ProviderConfigs[0].AllowAllKeys = false
+	}
 	for _, alias := range options.aliases {
 		if alias.Provider == schemas.OpenAI {
 			vk.ProviderConfigs[0].AllowedModels = append(vk.ProviderConfigs[0].AllowedModels, alias.Model)

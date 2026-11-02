@@ -365,7 +365,7 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 			ctx.Grant() == nil || ctx.Grant().Access() == nil || !ctx.Grant().Access().IsModelAllowed(string(target.Provider), target.Model) {
 			return nil, producerError(403, "selected target no longer matches original authority").Error
 		}
-		if _, restricted := ctx.Grant().Access().KeysForModel(string(target.Provider), target.Model); restricted {
+		if keys, restricted := ctx.Grant().Access().KeysForModel(string(target.Provider), target.Model); restricted && len(keys) != 0 {
 			return nil, producerError(403, "keyless managed target exceeds provider-key scope").Error
 		}
 		if selection.Funding == nil {
