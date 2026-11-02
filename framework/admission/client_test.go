@@ -3,6 +3,9 @@ package admission
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -690,5 +693,143 @@ func TestUninitializedNativeAuthorizerCannotMintIdentityOrSession(t *testing.T) 
 		if _, err := a.SessionHash(strings.Repeat("a", 64), new("conversation")); !errors.Is(err, ErrRejected) {
 			t.Fatal("uninitialized authorizer minted a predictable session")
 		}
+	}
+}
+
+func delegationFixture(t *testing.T) (*DelegationVerifier, delegationClaims, []byte, time.Time) {
+	t.Helper()
+	now := time.UnixMilli(1793580000000)
+	body := []byte(`{"model":"qwen","messages":[{"role":"user","content":"owned fixture"}]}`)
+	hash, _ := RequestDigest(Chat, body)
+	v, err := NewDelegationVerifier([]DelegationKey{{ID: "owned-key-1", Secret: bytes.Repeat([]byte{11}, 32), GatewayVirtualKeyIDs: []string{"owned-gateway-transit"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := delegationClaims{Version: 1, KeyID: "owned-key-1", RootID: "11111111-1111-4111-8111-111111111111", CallID: "22222222-2222-4222-8222-222222222222", SubjectHash: strings.Repeat("a", 64), SourceAlias: "qwen", AllowedAliases: []string{"qwen"}, Purpose: "main", API: string(Chat), BodyHash: hash, IssuedAtMS: uint64(now.UnixMilli()), ExpiresAtMS: uint64(now.UnixMilli() + 60000), QueueDeadlineMS: uint64(now.UnixMilli() + 45000), Weight: 1, MaxContextTokens: 32768, MaxOutputTokens: 4096, OriginalControls: json.RawMessage(`{"reasoning_effort":"low","temperature":0}`)}
+	return v, c, body, now
+}
+func delegationFixtureToken(t *testing.T, c delegationClaims, replace func([]byte) []byte) string {
+	t.Helper()
+	payload, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replace != nil {
+		payload = replace(payload)
+	}
+	h := hmac.New(sha256.New, bytes.Repeat([]byte{11}, 32))
+	h.Write([]byte(delegationDomain))
+	h.Write(payload)
+	return "swgd1." + base64.RawURLEncoding.EncodeToString(payload) + "." + base64.RawURLEncoding.EncodeToString(h.Sum(nil))
+}
+func TestGatewayDelegationRequiresExactRequestValidTimeAndResolvedTransitGrant(t *testing.T) {
+	v, c, body, now := delegationFixture(t)
+	token := delegationFixtureToken(t, c, nil)
+	proof, err := v.Verify([]string{token}, "POST", Chat, body, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	weight, contextTokens, outputTokens := proof.PolicyCaps()
+	if weight != 1 || contextTokens != 32768 || outputTokens != 4096 {
+		t.Fatal("original policy caps changed")
+	}
+	ctx := nativeGrantContext("owned-gateway-transit", "service", nativePermits(true))
+	before := ctx.Grant().Limits()
+	targets := []DelegationTarget{{"qwen", nativeTargets()[0]}, {"glm", nativeTargets()[1]}, {"ds", nativeTargets()[2]}}
+	auth, err := proof.Authorize(ctx, targets[0], targets, now)
+	if err != nil || !reflect.DeepEqual(auth.Pools, []string{"qwen"}) || auth.SubjectHash != c.SubjectHash || auth.OriginalLimits != before || ctx.Grant().Limits() != before {
+		t.Fatalf("delegated original scope/limits changed: %v", err)
+	}
+	if _, err = proof.Authorize(nativeGrantContext("employee-key", "employee", nativePermits(true)), targets[0], targets, now); !errors.Is(err, ErrDelegationRequired) {
+		t.Fatal("native employee key could use Gateway attestation")
+	}
+	if _, err = proof.Authorize(ctx, targets[0], targets, now.Add(time.Minute)); !errors.Is(err, ErrExpired) {
+		t.Fatal("proof survived waiting past its original deadline")
+	}
+	for _, tc := range []struct {
+		method string
+		api    API
+		body   []byte
+		values []string
+		at     time.Time
+	}{{"GET", Chat, body, []string{token}, now}, {"POST", Responses, body, []string{token}, now}, {"POST", Chat, []byte(`{}`), []string{token}, now}, {"POST", Chat, body, []string{token, token}, now}, {"POST", Chat, body, []string{token}, now.Add(time.Minute)}} {
+		if _, err = v.Verify(tc.values, tc.method, tc.api, tc.body, tc.at); err == nil {
+			t.Fatal("altered/expired request authorized")
+		}
+	}
+	controls := proof.OriginalControls()
+	controls[0] = '!'
+	if !json.Valid(proof.OriginalControls()) {
+		t.Fatal("caller mutated verified control snapshot")
+	}
+}
+func TestGatewayDelegationRejectsSignedParserAmbiguityAndExcessScope(t *testing.T) {
+	v, c, body, now := delegationFixture(t)
+	for _, change := range []func(*delegationClaims){func(c *delegationClaims) { c.Purpose = "image_observation"; c.AllowedAliases = []string{"glm", "qwen"} }, func(c *delegationClaims) { c.AllowedAliases = []string{"qwen", "qwen"} }, func(c *delegationClaims) { c.QueueDeadlineMS = c.IssuedAtMS + 60001 }, func(c *delegationClaims) { c.OriginalControls = json.RawMessage(`{"provider":"evil"}`) }, func(c *delegationClaims) { c.CallID = "caller-request-id" }, func(c *delegationClaims) { c.Weight = 0 }, func(c *delegationClaims) { c.Weight = 1001 }, func(c *delegationClaims) { c.MaxOutputTokens = 0 }, func(c *delegationClaims) { c.MaxOutputTokens = c.MaxContextTokens + 1 }} {
+		copy := c
+		change(&copy)
+		if _, err := v.Verify([]string{delegationFixtureToken(t, copy, nil)}, "POST", Chat, body, now); err == nil {
+			t.Fatal("invalid signed claims accepted")
+		}
+	}
+	for _, replace := range []func([]byte) []byte{func(b []byte) []byte { return append([]byte(`{"key_id":"duplicate",`), b[1:]...) }, func(b []byte) []byte { return append(b, []byte(` {}`)...) }, func(b []byte) []byte { return append([]byte(`{"unknown":1,`), b[1:]...) }} {
+		if _, err := v.Verify([]string{delegationFixtureToken(t, c, replace)}, "POST", Chat, body, now); err == nil {
+			t.Fatal("ambiguous signed JSON accepted")
+		}
+	}
+	token := delegationFixtureToken(t, c, nil)
+	for _, bad := range []string{token + "=", " " + token, strings.Replace(token, "swgd1.", "swgd1.\n", 1)} {
+		if _, err := v.Verify([]string{bad}, "POST", Chat, body, now); err == nil {
+			t.Fatal("noncanonical envelope accepted")
+		}
+	}
+}
+func TestOwnedRustGatewayDelegationProtocol(t *testing.T) {
+	path := os.Getenv("SW_OWNED_RUST_DELEGATION_VECTOR")
+	stdin := os.Getenv("SW_OWNED_GATEWAY_DELEGATION_STDIN") == "1"
+	if path == "" && !stdin {
+		t.Skip("requires an explicitly owned Rust-signed fixture")
+	}
+	var raw []byte
+	var err error
+	if stdin {
+		raw, err = io.ReadAll(io.LimitReader(os.Stdin, (8<<20)+1))
+	} else {
+		raw, err = os.ReadFile(path)
+	}
+	if err != nil || len(raw) > 8<<20 {
+		t.Fatal("owned input unavailable")
+	}
+	var input struct {
+		Token           string   `json:"token"`
+		Body            string   `json:"body"`
+		NowMS           int64    `json:"now_ms"`
+		ExpectedPools   []string `json:"expected_pools"`
+		ExpectedSubject string   `json:"expected_subject"`
+	}
+	if json.Unmarshal(raw, &input) != nil {
+		t.Fatal("owned fixture invalid")
+	}
+	at := time.UnixMilli(input.NowMS)
+	if stdin {
+		at = time.Now()
+	}
+	v, _, _, _ := delegationFixture(t)
+	proof, err := v.Verify([]string{input.Token}, "POST", Chat, []byte(input.Body), at)
+	if err != nil || !validUUID(proof.CallID()) {
+		t.Fatal("actual Rust signature/body did not verify")
+	}
+	ctx := nativeGrantContext("owned-gateway-transit", "service", nativePermits(true))
+	targets := []DelegationTarget{{proof.claims.SourceAlias, nativeTargets()[0]}, {"glm", nativeTargets()[1]}, {"ds", nativeTargets()[2]}}
+	auth, err := proof.Authorize(ctx, targets[0], targets, at)
+	expected := input.ExpectedPools
+	if expected == nil {
+		expected = []string{"qwen", "glm", "ds"}
+	}
+	if err != nil || !reflect.DeepEqual(auth.Pools, expected) || input.ExpectedSubject != "" && auth.SubjectHash != input.ExpectedSubject || auth.OriginalLimits != ctx.Grant().Limits() {
+		t.Fatal("Rust-signed original scope did not intersect real Grant")
+	}
+	if !schemas.IsSensitiveHeader(DelegationHeader) {
+		t.Fatal("delegation token would leak through trace headers")
 	}
 }

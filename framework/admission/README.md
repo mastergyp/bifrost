@@ -140,3 +140,40 @@ formula; model-access helper and the optional executor remain unreachable from
 the current HTTP server factory. The public provider-harness exemption is limited
 to that absence of a reachable HTTP behavior change. Actual HTTP registration
 must add entrance/auth/usage wire regressions before release.
+
+
+## Gateway original-caller delegation (candidate, unregistered HTTP guard)
+
+`DelegationVerifier` verifies a short-lived, domain-separated HMAC-SHA256
+`X-SW-Gateway-Delegation-Token` against the exact POST/API/body bytes. It rejects
+noncanonical base64, unknown/duplicate JSON members, invalid scopes/purposes and
+expired original queue deadlines. It uses `crypto/hmac.Equal`, not string equality.
+The header's `-Token` suffix is already redacted by core trace rules and covered
+by a regression. Verified metadata and key debug representations are redacted;
+secret bytes are excluded from JSON. Original controls are bounded and copied
+on read, never retained request/image bodies.
+
+`VerifiedDelegation.Authorize` runs after existing governance. A valid signature
+also needs its configured resolved Gateway VK row ID; native employee keys
+cannot borrow it. Signed original aliases intersect the existing VK model scope,
+alias mappings must be unique, and the admitted original Limits object stays
+intact. It never broadens a Grant, replaces its identity or skips budgets. Check
+before I/O and retain that admitted result for final usage: do not re-authorize
+an already accepted long inference when its admission token later expires.
+
+Verification does not consume a call. The final dispatcher must use signed
+CallID as the durable one-shot request/CAS identity; generating a new request ID
+for each replay is invalid. RootID is the original quota/audit correlation. A
+missing explicit conversation remains nil, never a user/body/request-ID hash.
+Target budgets/keys, capability/quality/context and registry-generation binding
+are still mandatory. The HTTP server factory does not register this guard yet.
+
+Do not globally reclassify a shared legacy VK as Gateway-only without its
+consumer inventory. A signed Gateway-only channel must distinguish employees
+from legitimate native service identities while preserving existing keys and
+financial owners. The source-to-wire-model mapping and all route shapes need
+real HTTP enforcement/wire regressions before cutover. This increment is a
+protocol/authorization component; no current HTTP request can reach the new
+verifier through the unmodified server factory, so its provider-harness exemption
+is limited to that fact. Do not interpret optional Gateway signature sending as
+physical routing enforcement.
