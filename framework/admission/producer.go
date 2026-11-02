@@ -300,6 +300,9 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 		return producerError(408, "original managed preparation deadline exceeded")
 	}
 	if err != nil {
+		if errors.Is(err, ErrUnavailable) || errors.Is(err, ErrNotEnforced) {
+			return producerError(503, "managed target preparation is unavailable")
+		}
 		return producerError(400, "request does not match an approved target contract")
 	}
 	pools := []string{}
@@ -385,7 +388,9 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 		}
 		actualRoute = &schemas.ManagedExecutionRoute{Requested: principal.OriginalRoute(), Resolved: schemas.Route{Provider: target.Provider, Model: target.Model}, Foreign: ticket.Lease.Foreign}
 		ctx.SetRoutingInfoSnapshot(actualRoute.RoutingInfo())
-		return map[string]string{"X-SW-Admission-Id": operation.ID, "X-SW-Admission-Owner": operation.Owner, "X-SW-Admission-Alias": operation.Alias}, nil
+		headers := map[string]string{"X-SW-Admission-Id": operation.ID, "X-SW-Admission-Owner": operation.Owner, "X-SW-Admission-Alias": operation.Alias}
+		p.client.setAuthority(func(k, v string) { headers[k] = v })
+		return headers, nil
 	}
 	cleanupPrepared := func(confirm bool) bool {
 		if ticket != nil {

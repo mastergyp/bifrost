@@ -2802,6 +2802,17 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 		return fmt.Errorf("failed to instantiate plugins: %v", err)
 	}
 
+	// Install managed admission only after the original governance plugin exists.
+	if err := s.configureManagedAdmission(ctx); err != nil {
+		return fmt.Errorf("managed admission startup refused: %w", err)
+	}
+	managedReady := false
+	defer func() {
+		if !managedReady && s.ManagedAdmission != nil {
+			s.ManagedAdmission.Close()
+		}
+	}()
+
 	// Initialize the webhook delivery dispatcher (requires both stores; the
 	// in-memory endpoint store on Config serves endpoint lookups).
 	if s.Config.LogsStore != nil && s.Config.ConfigStore != nil {
@@ -3114,12 +3125,18 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	// upstream starts serving mid-uptime stays invisible until a restart or a
 	// key edit, since nothing else re-fetches list-models.
 	s.RestartLiveModelRefresher(s.Ctx)
+	managedReady = true
 	return nil
 }
 
 // Start starts the HTTP server at the specified host and port
 // Also watches signals and errors
 func (s *BifrostHTTPServer) Start() error {
+	defer func() {
+		if s.ManagedAdmission != nil {
+			s.ManagedAdmission.Close()
+		}
+	}()
 	// Printing plugin status in a table
 	for _, pluginStatus := range s.Config.GetPluginStatus() {
 		logger.Info("plugin status: %s - %s", pluginStatus.Name, pluginStatus.Status)

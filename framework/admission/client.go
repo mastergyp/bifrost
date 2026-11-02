@@ -96,10 +96,20 @@ func (t *Ticket) ConfirmNeverDispatched(ctx context.Context) (bool, error) {
 	return *reply.NeverDispatched, nil
 }
 
+type controlAuthority struct{ namespace, contract string }
+
+func (c *Client) setAuthority(set func(string, string)) {
+	if c.authority != nil {
+		set("X-SW-Admission-Namespace", c.authority.namespace)
+		set("X-SW-Admission-Contract", c.authority.contract)
+	}
+}
+
 type Client struct {
-	socket string
-	http   *http.Client
-	data   *http.Client
+	authority *controlAuthority
+	socket    string
+	http      *http.Client
+	data      *http.Client
 }
 
 // New uses only the literal local socket; ambient proxies, caller URLs and
@@ -198,6 +208,7 @@ func (t *Ticket) Forward(ctx context.Context, api API, body []byte) (*ForwardRes
 		return nil, ErrRejected
 	}
 	request.Header.Set("Content-Type", "application/json")
+	t.client.setAuthority(request.Header.Set)
 	request.Header.Set("X-SW-Admission-Id", t.request.ID)
 	request.Header.Set("X-SW-Admission-Owner", t.request.Owner)
 	request.Header.Set("X-SW-Admission-Alias", t.request.Alias)
@@ -270,6 +281,7 @@ func (c *Client) call(ctx context.Context, path string, input, output any) error
 		return ErrUnavailable
 	}
 	request.Header.Set("Content-Type", "application/json")
+	c.setAuthority(request.Header.Set)
 	response, err := c.http.Do(request)
 	if err != nil {
 		if ctx.Err() != nil {
