@@ -1,12 +1,15 @@
 // Package admission implements the bounded, prepared-only local protocol used
 // by a pre-queue adapter. It does not authenticate users, grant model access,
-// select arbitrary URLs, dispatch inference or certify upstream termination.
+// select arbitrary URLs or certify upstream termination. A prepared ticket can
+// forward its exact bytes through the local sender; no provider is contacted here.
 // It is not registered in the Bifrost request pipeline yet.
 package admission
 
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +18,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -53,17 +57,21 @@ type Lease struct {
 // Cancel only cancels never-dispatched work; it cannot release a GPU slot after
 // dispatch. A dispatcher must CAS before I/O and retain all uncertain work.
 type Ticket struct {
-	Lease    Lease
-	Deadline time.Time
-	client   *Client
-	request  Request
+	Lease     Lease
+	Deadline  time.Time
+	client    *Client
+	request   Request
+	forwarded atomic.Bool
 }
 
 func (t *Ticket) Cancel(ctx context.Context) (bool, error) {
 	return t.client.cancel(ctx, t.request)
 }
 
-type Client struct{ http *http.Client }
+type Client struct {
+	http *http.Client
+	data *http.Client
+}
 
 // New uses only the literal local socket; ambient proxies, caller URLs and
 // redirects cannot redirect this control protocol to a network endpoint.
@@ -78,10 +86,134 @@ func New(socket string) (*Client, error) {
 		},
 		MaxConnsPerHost: 8, MaxIdleConnsPerHost: 2, IdleConnTimeout: 30 * time.Second,
 	}
-	return &Client{http: &http.Client{Transport: transport, Timeout: 2 * time.Second,
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}}, nil
+	dataTransport := transport.Clone()
+	dataTransport.MaxConnsPerHost = 128
+	dataTransport.MaxIdleConnsPerHost = 8
+	dataTransport.ResponseHeaderTimeout = 30 * time.Second
+	dataTransport.MaxResponseHeaderBytes = 32768
+	redirect := func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	return &Client{
+		http: &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: redirect},
+		data: &http.Client{Transport: dataTransport, CheckRedirect: redirect},
+	}, nil
 }
-func (c *Client) Close() { c.http.CloseIdleConnections() }
+func (c *Client) Close() {
+	c.http.CloseIdleConnections()
+	c.data.CloseIdleConnections()
+}
+
+// API is the canonical inference path, also part of the reservation digest.
+type API string
+
+const (
+	Chat              API = "/v1/chat/completions"
+	Responses         API = "/v1/responses"
+	maxInferenceBytes     = 8 << 20
+	maxResponseBytes      = 16 << 20
+)
+
+// ForwardResponse deliberately omits the underlying HTTP request and trailers:
+// the ticket owner capability is private even to response/logging adapters.
+type ForwardResponse struct {
+	StatusCode int
+	Header     http.Header
+	Body       io.ReadCloser
+}
+
+// RequestDigest must hash the same immutable bytes later passed to Forward.
+// It is domain-, method- and API-bound; hashing JSON after reserialization would
+// authorize different bytes. These vectors are shared with Rust execution.rs.
+func RequestDigest(api API, body []byte) (string, error) {
+	if api != Chat && api != Responses {
+		return "", ErrRejected
+	}
+	h := sha256.New()
+	_, _ = h.Write([]byte("sw-llm-execution-v1\x00POST\x00"))
+	_, _ = h.Write([]byte(api))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write(body)
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// Forward sends once to the fixed Unix sender, never to a caller-supplied URL.
+// ctx must belong to the bounded accounting operation, not just the downstream
+// socket. Its owner must consume through final usage after client disconnect;
+// closing this Body does not prove that GPU work or its quota obligation ended.
+// Transport errors are ambiguous and must never trigger inference replay.
+func (t *Ticket) Forward(ctx context.Context, api API, body []byte) (*ForwardResponse, error) {
+	if t == nil || t.client == nil || t.Lease.State != "prepared" || len(body) == 0 || len(body) > maxInferenceBytes {
+		return nil, ErrRejected
+	}
+	frozen := bytes.Clone(body)
+	digest, err := RequestDigest(api, frozen)
+	if err != nil || digest != t.request.BodyHash || !validRequest(t.request) || t.Lease.ID != t.request.ID {
+		return nil, ErrRejected
+	}
+	if !t.forwarded.CompareAndSwap(false, true) {
+		return nil, ErrRejected
+	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Minute+30*time.Second)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://localhost/inference"+string(api), bytes.NewReader(frozen))
+	if err != nil {
+		cancel()
+		return nil, ErrRejected
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-SW-Admission-Id", t.request.ID)
+	request.Header.Set("X-SW-Admission-Owner", t.request.Owner)
+	request.Header.Set("X-SW-Admission-Alias", t.request.Alias)
+	response, err := t.client.data.Do(request)
+	if err != nil {
+		cancel()
+		return nil, ErrUnavailable
+	}
+	if response.StatusCode >= 300 && response.StatusCode < 400 {
+		_ = response.Body.Close()
+		cancel()
+		return nil, ErrUnavailable
+	}
+	if response.ContentLength > maxResponseBytes {
+		_ = response.Body.Close()
+		cancel()
+		return nil, ErrUnavailable
+	}
+	// Retain only routing metadata. Internal capabilities and sender headers must
+	// not escape in the public adapter's response or in an upstream error.
+	headers := make(http.Header)
+	for _, name := range []string{"Content-Type", "X-SW-Requested-Model", "X-SW-Resolved-Model", "X-SW-Resolved-Pool", "X-SW-Resolved-Engine"} {
+		if value := response.Header.Get(name); value != "" {
+			headers.Set(name, value)
+		}
+	}
+	return &ForwardResponse{StatusCode: response.StatusCode, Header: headers,
+		Body: &inferenceBody{body: response.Body, cancel: cancel, remaining: maxResponseBytes}}, nil
+}
+
+type inferenceBody struct {
+	body      io.ReadCloser
+	cancel    context.CancelFunc
+	remaining int64
+}
+
+func (b *inferenceBody) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if int64(len(p)) > b.remaining+1 {
+		p = p[:b.remaining+1]
+	}
+	n, err := b.body.Read(p)
+	if int64(n) > b.remaining {
+		_ = b.Close()
+		return 0, ErrUnavailable
+	}
+	b.remaining -= int64(n)
+	if err != nil {
+		_ = b.Close()
+	}
+	return n, err
+}
+func (b *inferenceBody) Close() error { b.cancel(); return b.body.Close() }
 
 func (c *Client) call(ctx context.Context, path string, input, output any) error {
 	var body io.Reader

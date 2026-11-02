@@ -381,7 +381,7 @@ func runClaimedDeliveriesWithDeadCaller(t *testing.T, n int, fail bool) {
 		case <-time.After(5 * time.Second):
 			t.Fatalf("iteration %d: worker never reached the provider", i)
 		}
-		cancel()                      // the caller's context ends...
+		cancel()                       // the caller's context ends...
 		upstream.release <- struct{}{} // ...and the upstream completes at that same instant
 
 		// The caller has NOT abandoned: this models tryRequest losing the CAS race.
@@ -536,5 +536,102 @@ func TestRequestWorkerBillsAbandonedKeySelectionError(t *testing.T) {
 		if !strings.Contains(msg, "no keys found that support model: gpt-4o-mini") {
 			t.Fatalf("billed error %d is %q, want the key-selection error", i, msg)
 		}
+	}
+}
+
+// shortCircuitUsageProbe models a managed sender that owns an upstream after the
+// HTTP consumer disconnects. Usage arrives only on its last result.
+type shortCircuitUsageProbe struct {
+	terminalHookCounter
+	stream         chan *schemas.BifrostStreamChunk
+	tokens         atomic.Int64
+	metadataErrors atomic.Int64
+}
+
+func (p *shortCircuitUsageProbe) PreLLMHook(_ *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	return req, &schemas.LLMPluginShortCircuit{Stream: p.stream}, nil
+}
+func (p *shortCircuitUsageProbe) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, err *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
+	if resp != nil && resp.ChatResponse != nil {
+		if resp.ChatResponse.ExtraFields.RequestType != schemas.ChatCompletionStreamRequest {
+			p.metadataErrors.Add(1)
+		}
+		if resp.ChatResponse.Usage != nil {
+			p.tokens.Add(int64(resp.ChatResponse.Usage.TotalTokens))
+		}
+	}
+	return p.terminalHookCounter.PostLLMHook(ctx, resp, err)
+}
+
+// TestShortCircuitStreamKeepsLatePostHooks pins a cancellation after pre-hooks,
+// before/after the first downstream chunk. Draining without post-hooks would
+// unblock the sender but discard final usage and its terminal error. No provider
+// is contacted, and request metadata must survive the caller's pooled request.
+func TestShortCircuitStreamKeepsLatePostHooks(t *testing.T) {
+	for _, timing := range []string{"before-first", "after-first", "live"} {
+		t.Run(timing, func(t *testing.T) {
+			plugin := &shortCircuitUsageProbe{stream: make(chan *schemas.BifrostStreamChunk)}
+			account := NewMockAccount()
+			account.AddProvider(schemas.OpenAI, 1, 1)
+			client, err := Init(context.Background(), schemas.BifrostConfig{Account: account, Logger: NewNoOpLogger(), LLMPlugins: []schemas.LLMPlugin{plugin}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(client.Shutdown)
+			ctx, cancel := schemas.NewBifrostContextWithCancel(context.Background())
+			defer cancel()
+			req := &schemas.BifrostRequest{RequestType: schemas.ChatCompletionStreamRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "owned-model"}}
+			output, bfErr := client.tryStreamRequest(ctx, req)
+			if bfErr != nil {
+				t.Fatalf("short-circuit setup: %+v", bfErr)
+			}
+			req.RequestType = schemas.ResponsesStreamRequest // public caller may now reuse its request
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				defer close(plugin.stream)
+				plugin.stream <- nil
+				plugin.stream <- &schemas.BifrostStreamChunk{BifrostChatResponse: &schemas.BifrostChatResponse{ID: "first"}}
+				plugin.stream <- &schemas.BifrostStreamChunk{BifrostChatResponse: &schemas.BifrostChatResponse{ID: "late"}}
+				plugin.stream <- &schemas.BifrostStreamChunk{BifrostChatResponse: &schemas.BifrostChatResponse{ID: "usage", Usage: &schemas.BifrostLLMUsage{PromptTokens: 5, CompletionTokens: 2, TotalTokens: 7}}}
+				plugin.stream <- &schemas.BifrostStreamChunk{BifrostError: &schemas.BifrostError{Error: &schemas.ErrorField{Message: "late terminal diagnostic"}}}
+			}()
+			if timing == "after-first" {
+				select {
+				case chunk := <-output:
+					if chunk == nil || chunk.BifrostChatResponse == nil || chunk.BifrostChatResponse.ID != "first" {
+						t.Fatal("missing first chunk")
+					}
+				case <-time.After(3 * time.Second):
+					t.Fatal("first chunk stalled")
+				}
+			}
+			if timing != "live" {
+				cancel()
+			}
+			// In the cancelled cases do not consume output until the producer has exited:
+			// cancellation must unblock the send without the consumer's cooperation.
+			if timing != "live" {
+				select {
+				case <-done:
+				case <-time.After(3 * time.Second):
+					t.Fatal("abandoned short-circuit producer still blocked")
+				}
+			}
+			drained := make(chan struct{})
+			go func() {
+				for range output {
+				}
+				close(drained)
+			}()
+			select {
+			case <-drained:
+			case <-time.After(3 * time.Second):
+				t.Fatal("short-circuit output never closed")
+			}
+			if plugin.results.Load() != 3 || plugin.errors.Load() != 1 || plugin.tokens.Load() != 7 || plugin.metadataErrors.Load() != 0 {
+				t.Fatalf("late post-hooks lost/duplicated: results=%d errors=%d tokens=%d metadata_errors=%d", plugin.results.Load(), plugin.errors.Load(), plugin.tokens.Load(), plugin.metadataErrors.Load())
+			}
+		})
 	}
 }

@@ -1,10 +1,12 @@
 package admission
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -371,4 +373,196 @@ func TestAdmissionCancelNeverClaimsDispatchedWorkWasReleased(t *testing.T) {
 	if cancelled, err := client.cancel(context.Background(), fixtureRequest()); err != nil || cancelled {
 		t.Fatalf("claimed live work was released: %v / %v", cancelled, err)
 	}
+}
+
+// No public route reaches this client until the authenticated last pre-LLM hook
+// is registered. These are actual Unix HTTP requests, not a fake RoundTripper.
+func ownedTicket(client *Client, api API, body []byte) *Ticket {
+	r := fixtureRequest()
+	r.BodyHash, _ = RequestDigest(api, body)
+	return &Ticket{client: client, request: r, Lease: Lease{ID: r.ID, Pool: "qwen", Engine: "q2", State: "prepared"}}
+}
+func TestInferenceDigestMatchesRustAndRejectsOtherAPI(t *testing.T) {
+	for api, want := range map[API]string{Chat: "b147b409032a684ef3451e179d9692cbbf5497a9a97e75f7c64b5403c083906c", Responses: "64b30db07a8eb6e7a14d1fc05458fdf3ca5c124e512c80ca81b6816373e00395"} {
+		got, err := RequestDigest(api, []byte("{}"))
+		if err != nil || got != want {
+			t.Fatalf("Rust digest vector for %s: %s / %v", api, got, err)
+		}
+	}
+	var calls atomic.Int32
+	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) { calls.Add(1); respond(w, map[string]any{"ok": true}) })
+	ticket := ownedTicket(client, Chat, []byte("{}"))
+	for _, attempt := range []struct {
+		api  API
+		body []byte
+	}{{Responses, []byte("{}")}, {Chat, []byte("{} ")}, {API("/v1/chat/completions?target=ds"), []byte("{}")}} {
+		if _, err := ticket.Forward(context.Background(), attempt.api, attempt.body); !errors.Is(err, ErrRejected) {
+			t.Fatalf("mismatched dispatch accepted: %v", err)
+		}
+	}
+	if calls.Load() != 0 {
+		t.Fatal("I/O before digest/API validation")
+	}
+	resp, err := ticket.Forward(context.Background(), Chat, []byte("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if _, err = ticket.Forward(context.Background(), Chat, []byte("{}")); !errors.Is(err, ErrRejected) || calls.Load() != 1 {
+		t.Fatalf("replayed inference: %v / %d", err, calls.Load())
+	}
+}
+func TestInferenceLargeBodyUsesPrivateHeadersAndKeepsControlResponsive(t *testing.T) {
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	finish := func() { releaseOnce.Do(func() { close(release) }) }
+	defer finish()
+	started := make(chan struct{}, 12)
+	body := []byte(`{"model":"logical","messages":[{"role":"user","content":"` + strings.Repeat("x", 65536) + `"}],"stream":true}`)
+	var calls atomic.Int32
+	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/health" {
+			ready(w)
+			return
+		}
+		if r.URL.Path != "/inference/v1/chat/completions" || r.Header.Get("Authorization") != "" || len(r.Header.Values("X-SW-Admission-Owner")) != 1 || r.Header.Get("X-SW-Admission-Alias") != "qwen" {
+			t.Error("wrong path or leaked credentials")
+		}
+		actual, err := io.ReadAll(r.Body)
+		if err != nil || !bytes.Equal(body, actual) {
+			t.Error("forwarded bytes changed")
+		}
+		calls.Add(1)
+		started <- struct{}{}
+		<-release
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("X-SW-Resolved-Engine", "q2")
+		w.Header().Set("X-SW-Admission-Owner", fixtureRequest().Owner)
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	})
+	var wg sync.WaitGroup
+	for range 12 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			response, err := ownedTicket(client, Chat, body).Forward(context.Background(), Chat, body)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer response.Body.Close()
+			data, err := io.ReadAll(response.Body)
+			if err != nil || string(data) != "data: [DONE]\n\n" || response.Header.Get("X-SW-Resolved-Engine") != "q2" || response.Header.Get("X-SW-Admission-Owner") != "" {
+				t.Errorf("wrong response metadata/bytes: %v", err)
+			}
+		}()
+	}
+	for range 12 {
+		select {
+		case <-started:
+		case <-time.After(3 * time.Second):
+			t.Fatal("data calls consumed control pool or stalled")
+		}
+	}
+	var health map[string]any
+	if err := client.call(context.Background(), "health", nil, &health); err != nil {
+		t.Fatalf("health blocked by waiting inferences: %v", err)
+	}
+	// Finish handlers before fixture cleanup; deferred release also covers failure.
+	finish()
+	wg.Wait()
+	if calls.Load() != 12 {
+		t.Fatal("missing inference")
+	}
+}
+func TestInferenceDoesNotReplayAmbiguousSendOrFollowRedirect(t *testing.T) {
+	for _, kind := range []string{"disconnect", "redirect", "oversize"} {
+		t.Run(kind, func(t *testing.T) {
+			var calls atomic.Int32
+			client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				switch kind {
+				case "disconnect":
+					conn, _, err := w.(http.Hijacker).Hijack()
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					_ = conn.Close()
+				case "redirect":
+					w.Header().Set("Location", "http://external.invalid/replay")
+					w.WriteHeader(307)
+				case "oversize":
+					w.Header().Set("Content-Length", fmt.Sprint(maxResponseBytes+1))
+					w.WriteHeader(200)
+				}
+			})
+			ticket := ownedTicket(client, Chat, []byte("{}"))
+			if resp, err := ticket.Forward(context.Background(), Chat, []byte("{}")); err == nil {
+				resp.Body.Close()
+				t.Fatal("ambiguous/redirect/oversized response accepted")
+			}
+			if _, err := ticket.Forward(context.Background(), Chat, []byte("{}")); !errors.Is(err, ErrRejected) || calls.Load() != 1 {
+				t.Fatalf("ambiguous send replayed: %v / %d", err, calls.Load())
+			}
+		})
+	}
+}
+func TestInferenceBoundedChunkedBody(t *testing.T) {
+	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.(http.Flusher).Flush()
+		_, _ = io.CopyN(w, strings.NewReader(strings.Repeat("x", maxResponseBytes+1)), maxResponseBytes+1)
+	})
+	response, err := ownedTicket(client, Chat, []byte("{}")).Forward(context.Background(), Chat, []byte("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if _, err = io.Copy(io.Discard, response.Body); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("unbounded chunked response: %v", err)
+	}
+}
+
+func TestOwnedRustInferenceProtocol(t *testing.T) {
+	socket := os.Getenv("SW_ADMISSION_OWNED_CONTROL_SOCKET")
+	if socket == "" {
+		t.Skip("requires an explicitly owned Rust inference fixture")
+	}
+	var request Request
+	if err := json.Unmarshal([]byte(os.Getenv("SW_ADMISSION_OWNED_REQUEST")), &request); err != nil || !validRequest(request) {
+		t.Fatal("bad owned request")
+	}
+	body := []byte(os.Getenv("SW_ADMISSION_OWNED_BODY"))
+	if len(body) == 0 || len(body) > maxInferenceBytes {
+		t.Fatal("bad owned body")
+	}
+	digest, err := RequestDigest(Chat, body)
+	if err != nil || digest != request.BodyHash {
+		t.Fatal("Go/Rust API/body digest disagrees")
+	}
+	client, err := New(socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ticket := &Ticket{client: client, request: request, Lease: Lease{ID: request.ID, State: "prepared"}}
+	if _, err = ticket.Forward(ctx, Responses, body); !errors.Is(err, ErrRejected) {
+		t.Fatal("Chat ticket accepted for Responses")
+	}
+	response, err := ticket.Forward(ctx, Chat, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	result, err := io.ReadAll(response.Body)
+	if err != nil || response.StatusCode != 200 || !bytes.Contains(result, []byte("owned fixture complete")) || response.Header.Get("X-SW-Requested-Model") != "qwen" {
+		t.Fatalf("Rust managed inference response: %d / %v", response.StatusCode, err)
+	}
+	if _, err = ticket.Forward(ctx, Chat, body); !errors.Is(err, ErrRejected) {
+		t.Fatal("Go replayed ticket")
+	}
+	t.Log("owned_rust_inference_protocol_passed=true; synthetic_http_dispatch=true; production_enforcement=false")
 }

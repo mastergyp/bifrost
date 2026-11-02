@@ -6081,6 +6081,7 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 				}()
 				defer providerUtils.CloseStream(ctx, outputStream)
 
+				consumerGone := false
 				for streamMsg := range shortCircuit.Stream {
 					if streamMsg == nil {
 						continue
@@ -6108,21 +6109,22 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 
 					// Run post hooks on the stream message
 					processedResponse, processedError := pipelinePostHookRunner(ctx, bifrostResponse, streamMsg.BifrostError)
+					if consumerGone {
+						continue
+					}
 
 					// Build the client-facing chunk via the shared helper, which strips raw
 					// request/response fields when in logging-only mode without mutating the
 					// shared processedResponse or processedError objects.
 					streamResponse := providerUtils.BuildClientStreamChunk(ctx, processedResponse, processedError)
 
-					// Guarded send: if the consumer abandons outputStream (client
-					// disconnect, ctx cancel), drain the upstream shortCircuit.Stream
-					// so its producer can exit cleanly instead of blocking on its send.
+					// A disconnected consumer stops delivery, not post-hook processing.
+					// The producer can still report final usage or a terminal error;
+					// draining without hooks would silently discard that accounting.
 					// GateSendChunk routes through the pause/resume gate when a plugin
 					// has engaged it; otherwise it's a bare ctx-guarded channel send.
 					if !providerUtils.GateSendChunk(ctx, streamResponse, outputStream) {
-						for range shortCircuit.Stream {
-						}
-						return
+						consumerGone = true
 					}
 
 					// TODO: Release the processed response immediately after use
