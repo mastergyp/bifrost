@@ -64,3 +64,21 @@ The dedicated Unix HTTP tests cover file/secret/authority boundaries, actual con
 **Not activated in production.** The production Rust controller does not yet implement this preparation capability or its per-request authority enforcement, so this loader correctly refuses it. Next implement that endpoint plus the actual executable sender/target registry lifecycle, preserve Responses/tool/image semantics, connect the two real frontends, then publish an incremental production routing release. Native GLM and DeepSeek OpenAPI inspection shows only Chat/Completion tokenization; treating a Responses body as a Chat tokenize request is invalid. Preserve the existing Responses path while implementing its exact context/session contract; do not silently remove it to obtain a passing profile.
 
 This loader is one remaining production integration step, not evidence that automatic overflow or durable financial crash recovery has shipped. The Gateway's already-deployed four-engine observation is independent and remains available.
+
+
+## Linux artifact prepared, not activated
+
+Focused source `989fe5907743c4efff46250b0d1d7344ba3900ca` builds
+`sha256:14167dfe04f310efe7e8e0795ce02db8e8f731f3508a39dd9a434491f0f976bf`
+using `transports/Dockerfile.managed`. The Linux admission package passes and
+the compiled main binary's help exits0 in an owned network-none container,
+which was removed. Original official runtime User1000:0, entrypoint, command,
+environment, working directory, volumes, healthcheck and exposed ports match.
+[Artifact proof](evidence/managed-image-989fe59-20261103.json).
+
+This is compilation/local protocol proof, not full Linux managed application
+startup or production activation. An optional profile-probe image and the
+Gateway helper build are separate named jobs; inspect their original units,
+never restart because an observation timed out. The existing full-provider
+Dockerfile/proofs are retained; this increment uses admission tests only as
+authorized by the user's release policy.
