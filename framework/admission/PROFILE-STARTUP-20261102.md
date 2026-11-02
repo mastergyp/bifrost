@@ -1,5 +1,20 @@
 # Standalone managed-admission startup
 
+Latest joint success qualification: Gateway `e75a3a9` / Bifrost `1c3628a`
+now traverse actual Gateway HTTP (after a fixed authorized-policy fixture),
+original Redis/PG employee accounting, actual Bifrost HTTP/profile/governance,
+and Rust native sender. Six Gateway success scenarios include overflow,
+cancelled streams, purpose-scoped vision and five-image combined accounting;
+7 original employee rows/72 units/RPM7 match Redis, and 8 actual subcalls charge
+56 tokens to original Bifrost governance. Direct unauthorized model access
+remains403; both helper session bindings and all active leases end at0.
+[Source-bound proof](evidence/gateway-purpose-accounting-20261103.json) and
+[scope/remaining work](https://github.com/mastergyp/shinewing-ai-gateway/blob/codex/model-overflow-routing/docs/GATEWAY-PURPOSE-ACCOUNTING-20261103.md).
+These are synthetic engines and fixed identity policy, not real IdP/GPU or
+Linux managed-profile proof. Bifrost changes in this batch are test-only, so
+no provider-wire harness case is required. Production fork activation remains
+pending; Qwen private per-engine API/tokenizer paths are now deployed separately.
+
 2026-11-03 current: Gateway `cf88c72` now installs the actual Rust planner/sender;
 Bifrost `56f9981` requires its authority and durable-rejection handshake. The
 configured native/signed HTTP qualification passed 8 synthetic inference calls,

@@ -1,0 +1,167 @@
+{
+  "active": 0,
+  "actual_application_start_control": true,
+  "actual_gateway_frontend": {
+    "active_employee_leases": 0,
+    "actual_gateway_http_success_cases": 6,
+    "direct_helper_model_denied": 403,
+    "employee_actual_units": 72,
+    "employee_ledger_rows": 7,
+    "original_bifrost_governance": {
+      "actual_gateway_model_calls": 8,
+      "captured_claims": [
+        {
+          "allowed_aliases": [
+            "sw-glm",
+            "sw-qwen"
+          ],
+          "call_id": "37531df6-0a48-400e-b2b6-4090fac2aded",
+          "purpose": "main",
+          "root_id": "9651f6df-ae7c-4e34-ae1c-3c5e6f550aad",
+          "session_hash": "a053c8bef66bf7af2ac467c5e44ade5f47fa7749afb5640bd3e520702887fbb9",
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "45bdd6f945d178484d9d0f0256fa153ba8107dd06839bf52d04f98b9c292bd2e"
+        },
+        {
+          "allowed_aliases": [
+            "sw-glm",
+            "sw-qwen"
+          ],
+          "call_id": "59d5c005-777b-412b-8b77-42a6dd83ebed",
+          "purpose": "main",
+          "root_id": "159d6744-2091-4525-8d4a-bd7c4f4908f6",
+          "session_hash": "7c06a0154898160437f01180bc3c2e0d90ad3b31189aaa372193483da15f81cb",
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "45bdd6f945d178484d9d0f0256fa153ba8107dd06839bf52d04f98b9c292bd2e"
+        },
+        {
+          "allowed_aliases": [
+            "sw-glm",
+            "sw-qwen"
+          ],
+          "call_id": "e090222f-f51a-4c21-8216-2a33e09ad434",
+          "purpose": "main",
+          "root_id": "2e14beaf-b91a-430d-a3cd-16f517cf0ec3",
+          "session_hash": "2f887d613f71d500ab79528ff0e27fdf3649c3db326e74da7a1808d4ee514b06",
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "45bdd6f945d178484d9d0f0256fa153ba8107dd06839bf52d04f98b9c292bd2e"
+        },
+        {
+          "allowed_aliases": [
+            "sw-glm",
+            "sw-qwen"
+          ],
+          "call_id": "a6a11a8c-6c82-4f06-8d65-0976962b3a14",
+          "purpose": "main",
+          "root_id": "2ffb0227-0046-4ae2-bb08-6a662ed591ab",
+          "session_hash": "2d2eb0712f4e5f2a1d434aafb3d49c1956ccdca16f90fb0e44a811cafc189bc2",
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "45bdd6f945d178484d9d0f0256fa153ba8107dd06839bf52d04f98b9c292bd2e"
+        },
+        {
+          "allowed_aliases": [
+            "sw-qwen"
+          ],
+          "call_id": "60a52013-0554-4b08-b1f7-8c3bcb346db0",
+          "purpose": "vision_bridge",
+          "root_id": "18005e39-5610-4fbe-9764-5eb32715dee2",
+          "session_hash": null,
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "b133400fa17ba1483a035a9c621a10d6c88a76109eff855915b90ce6c45e3a7c"
+        },
+        {
+          "allowed_aliases": [
+            "sw-glm"
+          ],
+          "call_id": "9b997f82-d305-4243-9408-3f458825bf1c",
+          "purpose": "main",
+          "root_id": "18005e39-5610-4fbe-9764-5eb32715dee2",
+          "session_hash": "99645ab7e23d5d405365b9a41686be87c37b9168a0def8091d7101247f017f81",
+          "source_alias": "sw-glm",
+          "status": 200,
+          "subject_hash": "45bdd6f945d178484d9d0f0256fa153ba8107dd06839bf52d04f98b9c292bd2e"
+        },
+        {
+          "allowed_aliases": [
+            "sw-qwen"
+          ],
+          "call_id": "4b8c3e5f-d75d-4d9f-8df0-f51afafaa93f",
+          "purpose": "image_observation",
+          "root_id": "5dc691dc-6904-49f4-aee1-4b4b87a9f3a9",
+          "session_hash": null,
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "96d4098f272b126898974c4c0b8a6b82c6f4bb75ddb02d5adfd4d57af74c0d0a"
+        },
+        {
+          "allowed_aliases": [
+            "sw-glm",
+            "sw-qwen"
+          ],
+          "call_id": "2ab5ddb1-dcc4-4924-a575-7902b5f004ff",
+          "purpose": "main",
+          "root_id": "5dc691dc-6904-49f4-aee1-4b4b87a9f3a9",
+          "session_hash": "d87dd4d7d23fedf22a8707b6d0034e27f4ffcc449e496d4383baa23ea6f59bd2",
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "45bdd6f945d178484d9d0f0256fa153ba8107dd06839bf52d04f98b9c292bd2e"
+        }
+      ],
+      "original_governance_budget_delta": 0.0002405,
+      "original_governance_requests_delta": 8,
+      "original_governance_tokens_delta": 56,
+      "passed": true
+    },
+    "real_identity_provider": false,
+    "redis_rpm": 7,
+    "redis_tpm_daily_monthly": 72,
+    "same_model_five_image_adaptation": true,
+    "same_original_root": true,
+    "vision_helper_session_binding_rows": 0
+  },
+  "actual_go_profile_loader": true,
+  "authority_missing_rejected": 409,
+  "durable_rejection_dispatch_races": 12,
+  "finished_rows": 24,
+  "glm_calls": 7,
+  "glm_overflow_calls": 6,
+  "go_http_cases": 8,
+  "go_pre_ticket_rejection_replays": 4,
+  "managed_employee_gate_preserved": true,
+  "mock_inference_calls": 16,
+  "passed": true,
+  "qwen_calls": 9,
+  "real_gpu_or_user_credentials": false,
+  "schema": "planner_fixture_8373ded5db514e22b78af84374e14a1f",
+  "schema_removed": true,
+  "socket_removed": true,
+  "synthetic_primary_hold_rows": 2,
+  "synthetic_race_dispatched_rows": 6,
+  "source_revisions": {
+    "gateway": "e75a3a9a2a78eb24b9af909132cbd99d20ef48cb",
+    "bifrost": "1c3628aa1185bede290e215253d4c40cc470d2b6"
+  },
+  "probe_sha256": "ed84b0c5724e5c70b71fcb6b1172eea7b517e8080a088e6ae8a4f59169129d59",
+  "host_platform": "Darwin x86_64",
+  "executor_sha256": "feece32311d17b0bd857caf9f84a936dce50a494511111ae316987575c6f10a8",
+  "owned_container_removed": true,
+  "owned_redis_removed": true,
+  "scope": "Actual Gateway HTTP after fixed authorized-policy fixture -> actual Bifrost HTTP/profile/original governance -> Rust planner/controller/native sender; owned PG/Redis and synthetic engines",
+  "excluded": [
+    "real employee IdP/device proof",
+    "Linux managed application profile",
+    "real GPU cancellation or termination",
+    "production managed activation",
+    "cross-store financial crash recovery"
+  ],
+  "changed_checks": {
+    "rust_delegation_tests": 3,
+    "strict_all_target_clippy": "passed",
+    "provider_harness": "Bifrost changes in this batch are test-only; no provider wire implementation changed"
+  }
+}
