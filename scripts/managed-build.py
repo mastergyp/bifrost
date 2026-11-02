@@ -16,7 +16,7 @@ def main(args):
     root=base/("build-r1" if args.target=="main" else "probe-build-r1")
     root.mkdir(mode=0o700,exist_ok=True)
     save(root/"intent.json",{"revision":args.revision,"target":args.target,"source_archive_sha256":metadata["archive_sha256"]})
-    command=["docker","build","--build-arg","SOURCE_REVISION="+args.revision,"--iidfile",str(root/"image.id"),"-f","transports/Dockerfile.managed","-t","shinewing-bifrost-managed:"+args.revision+("-probe" if args.target=="probe" else "")]
+    command=["docker","build","--build-arg","APK_MIRROR=https://mirrors.cloud.tencent.com/alpine","--build-arg","GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct","--build-arg","SOURCE_REVISION="+args.revision,"--iidfile",str(root/"image.id"),"-f","transports/Dockerfile.managed","-t","shinewing-bifrost-managed:"+args.revision+("-probe" if args.target=="probe" else "")]
     if args.target=="probe":command += ["--target","profile-probe"]
     with (root/"build.private.log").open("x") as out:subprocess.run(command+["."],cwd=base/"source",stdout=out,stderr=subprocess.STDOUT,check=True)
     image=(root/"image.id").read_text().strip();assert re.fullmatch("sha256:[0-9a-f]{64}",image)
