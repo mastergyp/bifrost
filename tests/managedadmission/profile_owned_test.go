@@ -8,12 +8,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/valyala/fasthttp"
 	"io"
 	"math"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -49,6 +51,43 @@ func profileOwnedToken(api string, body []byte, session string) string {
 	return "swgd1." + base64.RawURLEncoding.EncodeToString(raw) + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
+func ownedConfiguredProfileFixture(t *testing.T) *fixture {
+	t.Helper()
+	socket := os.Getenv("SW_PROFILE_OWNED_SOCKET")
+	if socket == "" {
+		t.Skip("owned actual Rust profile only")
+	}
+	namespace, contract := os.Getenv("SW_PROFILE_NAMESPACE"), os.Getenv("SW_PROFILE_CONTRACT")
+	config := admission.Profile{Version: 1, Namespace: namespace, ContractSHA256: contract, Socket: socket, SubjectKeyEnv: "BIFROST_MANAGED_SUBJECT", DelegationKeys: []admission.ProfileDelegationKey{{ID: "owned-profile-1", SecretEnv: "BIFROST_MANAGED_SIGNING", GatewayVirtualKeyIDs: []string{vkID}}}, Models: []admission.ProfileModel{{Alias: "sw-qwen", Pool: "qwen", Provider: schemas.OpenAI, Model: model}, {Alias: "sw-glm", Pool: "glm", Provider: schemas.OpenAI, Model: "gpt-4.1"}}, MaxOperations: 8}
+	raw, _ := json.Marshal(config)
+	file := filepath.Join(t.TempDir(), "profile.json")
+	if err := os.WriteFile(file, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	factory := func(plugin *governance.GovernancePlugin) *admission.Runtime {
+		runtime, err := admission.LoadProfile(context.Background(), file, func(name string) (string, bool) {
+			switch name {
+			case "BIFROST_MANAGED_SUBJECT":
+				return strings.Repeat("s", 32), true
+			case "BIFROST_MANAGED_SIGNING":
+				return strings.Repeat("k", 32), true
+			}
+			return "", false
+		}, func(ctx *schemas.BifrostContext, typ schemas.RequestType, route schemas.Route, deadline time.Time) (admission.SelectedFunding, *schemas.BifrostError) {
+			approval, denied := plugin.CheckManagedTarget(ctx, typ, route, deadline)
+			if denied != nil {
+				return nil, denied
+			}
+			return approval, nil
+		}, bifrost.NewNoOpLogger())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return runtime
+	}
+	return fixtureWithInner(t, false, true, nil, "qwen", fixtureRouting{keylessEmpty: true, aliases: []admission.NativeModelAlias{{Provider: schemas.OpenAI, Model: "gpt-4.1", SourceAlias: "sw-glm"}}, runtimeFactory: factory})
+}
+
 // Explicitly launched by one disposable Rust/PostgreSQL fixture; it never
 // discovers production URLs, credentials, model endpoints or databases.
 func TestOwnedConfiguredProfileThroughActualRustPlanner(t *testing.T) {
@@ -56,7 +95,6 @@ func TestOwnedConfiguredProfileThroughActualRustPlanner(t *testing.T) {
 	if socket == "" {
 		t.Skip("requires owned Rust planner/controller/sender")
 	}
-	namespace, contract := os.Getenv("SW_PROFILE_NAMESPACE"), os.Getenv("SW_PROFILE_CONTRACT")
 	expectedPool := os.Getenv("SW_PROFILE_EXPECT_POOL")
 	if expectedPool != "qwen" && expectedPool != "glm" {
 		t.Fatal("owned expected pool missing")
@@ -68,34 +106,7 @@ func TestOwnedConfiguredProfileThroughActualRustPlanner(t *testing.T) {
 	for _, gateway := range []bool{false, true} {
 		for _, streaming := range []bool{false, true} {
 			t.Run(fmt.Sprintf("gateway=%t/stream=%t/pool=%s", gateway, streaming, expectedPool), func(t *testing.T) {
-				config := admission.Profile{Version: 1, Namespace: namespace, ContractSHA256: contract, Socket: socket, SubjectKeyEnv: "BIFROST_MANAGED_SUBJECT", DelegationKeys: []admission.ProfileDelegationKey{{ID: "owned-profile-1", SecretEnv: "BIFROST_MANAGED_SIGNING", GatewayVirtualKeyIDs: []string{vkID}}}, Models: []admission.ProfileModel{{Alias: "sw-qwen", Pool: "qwen", Provider: schemas.OpenAI, Model: model}, {Alias: "sw-glm", Pool: "glm", Provider: schemas.OpenAI, Model: "gpt-4.1"}}, MaxOperations: 8}
-				raw, _ := json.Marshal(config)
-				file := filepath.Join(t.TempDir(), "profile.json")
-				if err := os.WriteFile(file, raw, 0600); err != nil {
-					t.Fatal(err)
-				}
-				factory := func(plugin *governance.GovernancePlugin) *admission.Runtime {
-					runtime, err := admission.LoadProfile(context.Background(), file, func(name string) (string, bool) {
-						switch name {
-						case "BIFROST_MANAGED_SUBJECT":
-							return strings.Repeat("s", 32), true
-						case "BIFROST_MANAGED_SIGNING":
-							return strings.Repeat("k", 32), true
-						}
-						return "", false
-					}, func(ctx *schemas.BifrostContext, typ schemas.RequestType, route schemas.Route, deadline time.Time) (admission.SelectedFunding, *schemas.BifrostError) {
-						approval, denied := plugin.CheckManagedTarget(ctx, typ, route, deadline)
-						if denied != nil {
-							return nil, denied
-						}
-						return approval, nil
-					}, bifrost.NewNoOpLogger())
-					if err != nil {
-						t.Fatal(err)
-					}
-					return runtime
-				}
-				f := fixtureWithInner(t, false, true, nil, "qwen", fixtureRouting{keylessEmpty: true, aliases: []admission.NativeModelAlias{{Provider: schemas.OpenAI, Model: "gpt-4.1", SourceAlias: "sw-glm"}}, runtimeFactory: factory})
+				f := ownedConfiguredProfileFixture(t)
 				base, client := ownedHTTP(t, f)
 				body, _ := json.Marshal(map[string]any{"model": "openai/" + model, "messages": []any{map[string]any{"role": "user", "content": "owned synthetic prompt"}}, "max_completion_tokens": 17, "stream": streaming})
 				path := "/openai" + string(admission.Chat)
@@ -171,5 +182,66 @@ func TestOwnedConfiguredProfileThroughActualRustPlanner(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// Test-only server for the real Rust Gateway frontend. It exposes no external
+// network or real credentials and exits on the parent's exact stdin signal.
+func TestOwnedConfiguredProfileHTTPServerForGateway(t *testing.T) {
+	if os.Getenv("SW_PROFILE_GATEWAY_HTTP_SERVER") != "1" {
+		t.Skip("owned Gateway joint fixture only")
+	}
+	f := ownedConfiguredProfileFixture(t)
+	var mu sync.Mutex
+	var claims []map[string]any
+	base, _ := ownedHTTP(t, f, func(ctx *fasthttp.RequestCtx) {
+		raw := string(ctx.Request.Header.Peek(admission.DelegationHeader))
+		parts := strings.Split(raw, ".")
+		if len(parts) != 3 {
+			return
+		}
+		decoded, e := base64.RawURLEncoding.DecodeString(parts[1])
+		if e != nil {
+			return
+		}
+		var c map[string]any
+		if json.Unmarshal(decoded, &c) != nil {
+			return
+		}
+		safe := map[string]any{"root_id": c["root_id"], "call_id": c["call_id"], "purpose": c["purpose"], "subject_hash": c["subject_hash"], "session_hash": c["session_hash"], "source_alias": c["source_alias"], "allowed_aliases": c["allowed_aliases"], "status": ctx.Response.StatusCode()}
+		mu.Lock()
+		claims = append(claims, safe)
+		mu.Unlock()
+	})
+	fmt.Println("OWNED_PLANNED_GATEWAY_READY " + base)
+	done := make(chan struct{})
+	go func() { _, _ = io.ReadFull(os.Stdin, make([]byte, 1)); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(40 * time.Second):
+		t.Fatal("parent did not stop owned frontend")
+	}
+	f.client.Shutdown()
+	data := f.store.GetGovernanceData(context.Background())
+	cost := func(target string) float64 {
+		return f.catalog.CalculateCost(&schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{Model: target, Usage: &schemas.BifrostLLMUsage{PromptTokens: 5, CompletionTokens: 2, TotalTokens: 7}, ExtraFields: schemas.BifrostResponseExtraFields{RequestType: schemas.ChatCompletionRequest, Provider: schemas.OpenAI, OriginalModelRequested: model, ResolvedModelUsed: target}}}, nil)
+	}
+	expected := 3*cost(model) + 3*cost("gpt-4.1")
+	if expected <= 0 || data.RateLimits["original-rate"].TokenCurrentUsage != 79 || data.RateLimits["original-rate"].RequestCurrentUsage != 10 || math.Abs(data.Budgets["original-budget"].CurrentUsage-(13.25+expected)) > 1e-9 {
+		t.Fatal("original governance lost actual Gateway/auxiliary target usage")
+	}
+	if f.account.keys.Load() != 0 {
+		t.Fatal("managed Gateway nested provider worker")
+	}
+	mu.Lock()
+	captured := append([]map[string]any{}, claims...)
+	mu.Unlock()
+	if len(captured) != 6 {
+		t.Fatalf("expected 6 actual calls, got %d", len(captured))
+	}
+	evidence := map[string]any{"passed": true, "actual_gateway_model_calls": 6, "original_governance_tokens_delta": 42, "original_governance_requests_delta": 6, "original_governance_budget_delta": expected, "captured_claims": captured}
+	raw, _ := json.MarshalIndent(evidence, "", "  ")
+	if err := os.WriteFile(os.Getenv("SW_PROFILE_GATEWAY_EVIDENCE"), raw, 0600); err != nil {
+		t.Fatal(err)
 	}
 }
