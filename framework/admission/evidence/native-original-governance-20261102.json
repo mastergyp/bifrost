@@ -1,0 +1,153 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-11-02T10:15:29.062854+08:00",
+  "source_revision": "0ddb997289a1a2a7fa51d5f71ff4b0e720316987",
+  "base_revision": "cdfcb89ec5860388306d2ce0a4bcd6d1baae187b",
+  "source_files_sha256": {
+    "core/abandonedstream_test.go": "e32b854c462cd4510209a0bf37bdafa742a6c3d0177366d81d54fb8e8f943cbf",
+    "core/bifrost.go": "b185e47be2ffba4e4ff04b513f30753fba79758bf44854574ee964eff4c4e395",
+    "core/managedinference.go": "10cefcbc1bb3419e888e52ab8dd8c60625436a39ab12b66e666d378d4fb8fd4e",
+    "core/schemas/bifrost.go": "ccc4037a5507bd3c2b0b7ac8162f81ae651a186908685d115a4402941309602a",
+    "core/schemas/plugin.go": "765cb255e903c4ba54dbd48e0d7566423982320038ea6a212b5fd324d612b72e",
+    "framework/admission/README.md": "05b979bbcf4541c2c6ac33eee56054b366b9a96bda9049705a12950968fcd9c8",
+    "framework/admission/authorization.go": "b4bf081b5bd057b7fbf8ca77565dfbe924dcb631f0fe829390a4fd3bed811fbb",
+    "framework/admission/client_test.go": "92e0f353673505eb8387c420362a7cb9dc6fa4bcffe0f20a203016c30eaf2bdd",
+    "plugins/governance/main.go": "3f71f6afbdb0e917303a3f00a91db972f27ee3e3cf3576a756397a32543ef0d2",
+    "plugins/governance/routingembedcost_test.go": "f31b5864cb0530a5b3818e7f38f4243c41671d3745e4340d5253e6475aa701ab",
+    "tests/managedadmission/README.md": "8c0ffb51c791fcb153392fbacc24dd5b844790bc7f39a6389b7e3596653fcdd7",
+    "tests/managedadmission/go.mod": "37f783ba1c8609b6fa6777ae5c134d958dc31519d9e7bc87b1dcb2aa32ac4f1a",
+    "tests/managedadmission/go.sum": "64e3654249bbad46d1da37117749f72f520fe1733efb36d167a7cb287ea6e7e3",
+    "tests/managedadmission/managed_test.go": "e27223b2673a4d8c12469495890470f9c3ceac43a3fcf953887b1f33b7c5ba77"
+  },
+  "tests": [
+    {
+      "name": "core-boundary",
+      "command": "GOTOOLCHAIN=go1.27.0 go test -C core -race -count=1 -json -run 'TestManaged|TestShortCircuit|TestAbandoned|Test.*Claim' .",
+      "sha256": "ec18b20906263c314b1f6009cb3c132fbe05edfa0fec696f5487a31f37494c80",
+      "passed_test_events_including_subtests": 13,
+      "skipped_tests": [],
+      "package_pass": true,
+      "race_reported": false
+    },
+    {
+      "name": "core-schemas",
+      "command": "GOTOOLCHAIN=go1.27.0 go test -C core -race -count=1 -json ./schemas",
+      "sha256": "69f5dc19f4daadbd3952c22b36787c635118855c2a11a381b2b5eaed44692e50",
+      "passed_test_events_including_subtests": 1099,
+      "skipped_tests": [],
+      "package_pass": true,
+      "race_reported": false
+    },
+    {
+      "name": "native-authorization",
+      "command": "GOTOOLCHAIN=go1.27.0 go test -C framework -race -count=1 -json ./admission",
+      "sha256": "829229165aa022ab5157e85287d30c20316a105aec96dea169e6d81a6caaafbc",
+      "passed_test_events_including_subtests": 30,
+      "skipped_tests": [
+        "TestOwnedRustControlProtocol",
+        "TestOwnedRustInferenceProtocol"
+      ],
+      "package_pass": true,
+      "race_reported": false
+    },
+    {
+      "name": "real-governance-sdk",
+      "command": "GOTOOLCHAIN=go1.27.0 go test -C tests/managedadmission -race -count=1 -json ./...",
+      "sha256": "4dc031429cb35e971d1beb51bcb11e12b56a63804a018db252a00d13737564ce",
+      "passed_test_events_including_subtests": 10,
+      "skipped_tests": [],
+      "package_pass": true,
+      "race_reported": false
+    },
+    {
+      "name": "governance-package",
+      "command": "GOTOOLCHAIN=go1.27.0 go test -C tests/managedadmission -race -count=1 -json github.com/maximhq/bifrost/plugins/governance",
+      "sha256": "1dd1607767b87fadb28b91db101dd7ca45b2b87b763df68ec722823e814fb763",
+      "passed_test_events_including_subtests": 597,
+      "skipped_tests": [
+        "TestCheckBudgetHonoursResetSemantics/calendar_aligned_budget_expires_on_the_calendar_boundary"
+      ],
+      "package_pass": true,
+      "race_reported": false
+    },
+    {
+      "name": "accounting-repeated",
+      "command": "GOTOOLCHAIN=go1.27.0 go test -C tests/managedadmission -race -count=3 -json ./... github.com/maximhq/bifrost/plugins/governance -run 'Test(Original|Exhausted|Accounting_|PostHook|PreparedUsage|AttributeRouting)'",
+      "sha256": "d7946ba676e52a2d5f6a18068fc0c63c32f8059c24a6053a140e743e22609457",
+      "passed_test_events_including_subtests": 105,
+      "skipped_tests": [],
+      "package_pass": true,
+      "race_reported": false
+    }
+  ],
+  "vet": {
+    "sw-managed-vet.log": {
+      "no_diagnostics": true,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "sw-managed-core-vet.log": {
+      "no_diagnostics": true,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "sw-managed-auth-vet.log": {
+      "no_diagnostics": true,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "red_before_green": [
+    {
+      "log_name": "sw-managed-core-red-real.log",
+      "sha256": "f0032e7db552e4a1e3a412fd0ed6386b6cbd85ff22352cd7acc7241457fde9ff",
+      "expected_signal": "managed=0 direct=1"
+    },
+    {
+      "log_name": "sw-managed-shape-red.log",
+      "sha256": "238131a8dab2d8b85374eee977cfba13b376fbf5546c90416fb7e5966fce5994",
+      "expected_signal": "native_http=1"
+    },
+    {
+      "log_name": "sw-native-authorizer-zero-red.log",
+      "sha256": "5a8624fa9f6127b56be85b89fd8c9d05bc4753010b01cd2e44bb8d6911cd836c",
+      "expected_signal": "uninitialized authorizer minted a predictable subject"
+    },
+    {
+      "log_name": "sw-managed-original-governance.log",
+      "sha256": "9b0e39fa59a5d3da75a17e852b7d7130e0c26f6b8058a28e7438965a0dd8253a",
+      "expected_signal": "WARNING: DATA RACE"
+    }
+  ],
+  "scope": {
+    "optional_core_sdk_boundary": true,
+    "actual_local_core_framework_governance": true,
+    "synthetic_managed_producer": true,
+    "original_limits_handle_retained": true,
+    "original_budget_before": 13.25,
+    "fixture_input_tokens": 5,
+    "fixture_output_tokens": 2,
+    "original_tokens_before_after": [
+      37,
+      44
+    ],
+    "original_requests_before_after": [
+      4,
+      5
+    ],
+    "real_model_or_gpu_execution": false,
+    "new_go_rust_combined_integration": false,
+    "http_server_factory_activated": false,
+    "all_entrances_qualified": false,
+    "production_changed": false,
+    "client_changed": false,
+    "keys_rotated": false,
+    "whole_batch_release_qualified": false
+  },
+  "remaining": [
+    "verified original Gateway caller delegation bound to exact outbound request",
+    "actual target budgets and provider-key eligibility",
+    "per-target parameter/capability/quality contracts and original intent",
+    "one shared logical image processor and physical gate for all entrances",
+    "native engine abort, epoch fencing and ambiguous/crash recovery",
+    "all-entry wire/real model fault regression and globally consistent release/rollback"
+  ],
+  "red_before_green_note": "First governance fixture also used an unrelated unpriced model; only its real response metadata race is counted as that red signal. Fixture pricing and pooled-request goroutine capture were corrected before final qualification."
+}
