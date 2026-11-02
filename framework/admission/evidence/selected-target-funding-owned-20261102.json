@@ -1,0 +1,39 @@
+{
+  "passed": true,
+  "gateway_revision": "6d5c018ceaf2eee04be1209a95e191a46a7c6ae2",
+  "bifrost_revision": "e73125b87fec6778ea014a2eb224080f03cfb05e",
+  "go_probe_sha256": "3f91f85655b7b768442d7e1b1c45c0f98eb67e17518df7418a742ae88deb6b5f",
+  "executor_sha256": "4ce3ad5127c6f6ef604b6dc49a7bb65f44e34e9122da32425bc14587112bbdcd",
+  "postgres_image": "sha256:108b27c919e6e7bc124350fb265deea9adac58e118eade428c6d1ad44b90debe",
+  "redis_image": "sha256:aa189b5a1954929c393585e6dc5717a75b18f75a931df8bdcc00a3d3bd546be6",
+  "owned_containers_removed": 2,
+  "production_accessed": false,
+  "real_model_calls": 0,
+  "paired_gateway_request_bifrost_http_factory_exercised": false,
+  "production_physical_producer_registered": false,
+  "owned_bifrost_http_rust_producer_qualified": true,
+  "whole_model_routing_release_qualified": false,
+  "markers": [
+    {
+      "actual_upstream_calls": 2,
+      "caller_token_ignored": true,
+      "cross_language_go_verifier": true,
+      "original_ledger_rows": 2,
+      "original_scope_preserved": true,
+      "owned_gateway_http_delegation_passed": true,
+      "raw_controls_frozen": true
+    }
+  ],
+  "original_completed_ledger_rows": 2,
+  "gateway_http_log_sha256": "5c10a8de786221fe057fe3105fe0b417dbe0b7ec660b4b0b616331c83296ad44",
+  "owned_physical_control": {
+    "passed": true,
+    "absolute_deadline_checked": true,
+    "actual_go_rust_mock_inference_passed": true,
+    "actual_bifrost_http_rust_producer_cases": 8,
+    "selected_target_denial_before_data_checked": true,
+    "producer_probe_sha256": "78dc3cd27729f6a1124ee33348bd47baac4634ceb5e6d859dcbbc0e4b3bc0ca0",
+    "original_regressions_log_sha256": "322cc9aee91a384b690bc3f6fb32232273d07a771a496c65fa4e4da9fcc58f62",
+    "control_log_sha256": "ea7d8818b01bcaf6428732ff1aa3f000947492f51dcccb59d3f603ee9c3b91f0"
+  }
+}

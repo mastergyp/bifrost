@@ -421,3 +421,66 @@ provider calls. No production activation or model/client/key changes. The
 remaining release work listed above still applies, except native original
 logical-model binding is now implemented and isolated-tested. Existing native
 TCP pool stress failure is retained and was not rerun or declared solved here.
+
+## Selected-target funding before dispatch (isolated, keyless private profile)
+
+Fixed Bifrost `e73125b87fec6778ea014a2eb224080f03cfb05e` requires a
+`SelectedTargetPolicy` as well as preparation. After acquiring the actual lease,
+Producer checks the selected pool/model and original access, requires an opaque
+funding approval for that exact provider/model/request type, and binds it to the
+original request before data I/O. Missing/mismatched approvals and named-key
+restrictions fail before dispatch. The profile uses registered keyless private
+backends. Existing `allow_all_keys=false` plus an empty named-key list remains
+compatible with keyless execution; production observation found this shape on
+four private-provider grants, with no provider keys or named-key links. No
+credential or permission migration is needed for that shape.
+
+Governance's `CheckManagedTarget` reads current selected-target limits and
+combines them with the original admitted payer snapshot, deduplicating shared
+IDs. It uses the existing store checks and tracker, keeps the original Grant,
+identity and Limits handles, and freezes the checked payers for final usage.
+Approvals last at most two seconds and are bound after queueing. Candidate
+refusals do not poison the original request's governance state. A store error
+with an otherwise `allow` decision is refused. Core restores bounded trusted
+managed routing before and after post-hooks (fresh nested fields per chunk),
+so pricing/logging sees the selected model and retains original intent. The
+producer also checks the original caller and absolute clock directly: the
+BifrostContext parent-cancellation watcher alone can lag and previously let a
+cancellation during selection dispatch inference.
+
+Qualification:67 admission race events/3 ordinary owned skips,55 HTTP/SDK events/
+1 ordinary owned skip,617 full governance events/1 skip,12 managed-core events,
+vet and Rust fmt/strict clippy pass. Four standalone governance Chat/Responses
+unary/streaming shapes prove distinct original/source/target budgets and rates
+move once at the selected model's nonzero price, including late usage after
+caller cancellation and a later configuration change. These are component
+financial tests, not real-model overflow. Original Grant handles remain intact.
+Budget/rate/deadline/store errors, foreign/expired/replaced approvals and wrong
+funding target/type are refused; the parent-cancel case also passes20 repeats.
+Red/green preserves the old ignored selected denial, old-core metadata loss,
+cancellation scheduling race, and the initial empty-key-scope compatibility bug.
+
+With fixed Gateway `6d5c018ceaf2eee04be1209a95e191a46a7c6ae2`, all eight
+canonical native/signed HTTP-to-real-Rust cases now use actual original
+Governance-issued approvals with the existing empty-key-list shape. A further
+SDK selected-budget denial cancels prepared work before model I/O; the real
+controller ends active0. Original121 PG/Redis tests,capacity100,all four explicit
+owned Go probes and independent Gateway2-row proof pass;2 containers removed.
+[Summary](evidence/selected-target-funding-20261102.json),
+[owned receipt](evidence/selected-target-funding-owned-20261102.json).
+
+Production remains unchanged. Fresh observation is two active Qwen replicas
+(gpu2/3,8 sequences each) behind Nginx least_conn, GLM8 and DeepSeek36; running
+llm-d containers are outside that Qwen front route. Pool `/metrics` samples one
+replica, not the fleet. The old boot-recovery timer still fails on stopped
+gpu4-7; its running-container guard prevents reopening them. Historical six-
+replica receipts must not be used as current production topology qualification.
+
+This reuses Bifrost's live spending checks and asynchronous tracking; it adds
+no atomic money reservation or durable crash settlement. Production registry/
+health/context/quality policy+loader, signed Gateway no-dispatch financial
+handoff and one request across both actual frontends, common image/cache
+compatibility, abort/unknown-work recovery, native TCP pool Linux stress and
+full fixed Linux release/rollback remain. Public standalone CLI cannot install
+this embedded runtime, so the paid harness cannot trigger the new branch;
+owned actual canonical HTTP tests cover it. No paid provider calls were run.
