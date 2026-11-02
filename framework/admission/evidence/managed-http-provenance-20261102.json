@@ -1,0 +1,161 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "status": "candidate_component_qualified_not_production_release",
+  "gateway_source_revision": "872e14e51b09ede8d6e842098c2d516486db0285",
+  "bifrost_runtime_source_revision": "8b0d3e47b4978fcba7f36b90749e00decaac0a7d",
+  "gateway_merged_production_ledger_hotfix": true,
+  "qualification": {
+    "suite": {
+      "sha256": "2bd548bc13527be7a7644d11930f6b823c2fb70627517f0dbfc18e232b5dd830",
+      "test_events": {
+        "github.com/maximhq/bifrost/framework/admission": {
+          "pass": 50,
+          "skip": 3
+        },
+        "github.com/mastergyp/bifrost-tests/managedadmission": {
+          "pass": 26
+        }
+      },
+      "exit_status": 0
+    },
+    "core": {
+      "sha256": "19bb9a5c8591b25e7c64f07984e5d7911d90bee7732638ee01af27f4ce04521f",
+      "test_events": {
+        "github.com/maximhq/bifrost/core": {
+          "pass": 18
+        }
+      },
+      "exit_status": 0
+    },
+    "repeat": {
+      "sha256": "47748cfe51d45439865c3656d75f0f75580dd85f53e6e385ff5f0dca043be0a7",
+      "test_events": {
+        "github.com/mastergyp/bifrost-tests/managedadmission": {
+          "pass": 27
+        }
+      },
+      "exit_status": 0
+    },
+    "schemas": {
+      "sha256": "385527894d92a1ea93961d1c7df320e5e3603e84c2a78998bc737e5faa0411e7",
+      "test_events": {
+        "github.com/maximhq/bifrost/core/schemas": {
+          "pass": 1099
+        }
+      },
+      "exit_status": 0
+    },
+    "vet": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "test_events": {},
+      "exit_status": 0
+    }
+  },
+  "red_before_fix_log_sha256": {
+    "context_unowned_provider": "735d26fb7b31e0125c61574c9bac9fade2b74de810882b2a762c43baf4f116fb",
+    "successful_prehook_shortcut": "2c1141f5bfbd2d45f5c049b4d4c0eacc451a04682a4c135180ab50320fc5d554"
+  },
+  "actual_bifrost_http": {
+    "canonical_server_composition": true,
+    "real_core_grant_governance": true,
+    "producer": "in_process_synthetic",
+    "routes": [
+      "native_chat",
+      "native_responses",
+      "signed_gateway_chat",
+      "signed_gateway_responses"
+    ],
+    "positive_shapes": 8,
+    "positive_repetitions": 3,
+    "positive_leaf_executions": 24,
+    "denial_shapes": 6,
+    "original_nonzero_money_tokens_requests_preserved_once": true,
+    "cancelled_sse_final_usage_preserved": true,
+    "provider_key_selections": 0,
+    "real_model_calls": 0,
+    "rust_physical_sender_used": false
+  },
+  "paired_gateway_http_go_verifier": {
+    "receipt_sha256": "19f69784c3fe001339ae33785c0a648521596719f353a5e4c00e1d4a284f3977",
+    "actual_http_requests": 2,
+    "original_completed_ledger_rows": 2,
+    "owned_containers_removed": 2,
+    "bifrost_http_factory_exercised": false
+  },
+  "harness": {
+    "added_cases": 5,
+    "augment_passed": true,
+    "filtered_provider": "openai",
+    "filtered_feature": "managed-provenance",
+    "filtered_cases": 5,
+    "live_provider_harness_run": false,
+    "reason": "Repository requires operator-selected paid live sweep; local actual HTTP regression is separately qualified."
+  },
+  "candidate": {
+    "nullable_http_factory_wired": true,
+    "standalone_cli_runtime_configured": false,
+    "physical_producer_registered": false,
+    "context_provenance_cannot_escape_unowned_provider": true,
+    "successful_prehook_shortcuts_checked": true,
+    "cached_results_qualified": false,
+    "unqualified_cached_result_status": 503,
+    "unconfigured_native_cache_unchanged": true,
+    "original_queue_expiry_status": 408,
+    "alias_same_pool_deduplicated": true,
+    "durable_call_id_consumed": false,
+    "all_entry_shapes_qualified": false,
+    "whole_model_routing_release_qualified": false
+  },
+  "production_readonly": {
+    "receipt_sha256": "cdf9eaa4fb3bf5fbbf91c2557d520a0453ade6c0b10a59c56c5b1b65194e59e0",
+    "containers": [
+      {
+        "id": "b10d07801c15c16e5e4c658590b67dd2e2282c7234676d52b29a641f5d0c6c5f",
+        "image": "sha256:ef872a4e1a8940002bf0b00409d018467280f46f99f502ada5193916db22d155",
+        "started": "2026-11-02T05:21:36.079522701Z",
+        "running": true,
+        "restarts": 0,
+        "config_host_sha256": "d0a8dace96166c5dc641396b41347c478fb96fe1dddbc3ec68dc5f4e991d324f"
+      },
+      {
+        "id": "9e5a21da164a3240d5ffd1c4e8d8591d01260df45c46f332596138195204db39",
+        "image": "sha256:54f62d143c37d5508cd4211d54751e9b686f503b2582bf0ac3e772b596b29520",
+        "started": "2026-11-01T05:24:42.033804517Z",
+        "running": true,
+        "restarts": 0,
+        "config_host_sha256": "c8ae10343e1dd6fd3621a140d2ffcad34976475e4310de51e944f49a6feb04a2"
+      }
+    ],
+    "health": {
+      "generic": {
+        "status": 200,
+        "service": "shinewing-ai-gateway",
+        "version": "0.5.0",
+        "revision": "fd17c5ed9c93b0805deefb941915a83831127dd4",
+        "published_version": 18
+      },
+      "admin": {
+        "status": 200,
+        "service": "shinewing-ai-gateway-admin",
+        "version": null,
+        "revision": null,
+        "published_version": 18
+      },
+      "llm": {
+        "status": 200,
+        "service": "shinewing-llm-access-gateway",
+        "version": "0.5.0",
+        "revision": null,
+        "published_version": null
+      }
+    },
+    "mutated_this_increment": false
+  },
+  "limits": [
+    "No combined Gateway -> Bifrost HTTP -> Rust -> actual engine proof in this increment.",
+    "No target finance/key/context/quality/registry-generation release qualification.",
+    "Shared images, cache receipts, async/WebSocket, real engine abort and durable unknown/crash finance remain pending.",
+    "The earlier Linux source/image receipts remain historical and are not relabelled as a newly built merge image."
+  ]
+}

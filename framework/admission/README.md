@@ -1,11 +1,11 @@
 # Shared physical admission protocol client
 
-Candidate client and authorization library. No HTTP server factory installs a
-managed executor yet; no production configuration, Key or Grant was changed.
-An optional core SDK boundary and real-governance fixture now exist below.
-Prepared tickets can now forward their exact bytes to the local Rust sender.
-No public/provider hook calls this package yet. The existing Gateway quota ledger
-and Bifrost governance remain the respective financial owners.
+Candidate client, authorization library and nullable HTTP runtime. The factory can
+compose that runtime, while the standalone CLI installs none and a qualified
+physical producer is still pending. No production configuration, Key or Grant was
+changed. Prepared tickets can forward exact bytes to the local Rust sender in
+owned fixtures. The existing Gateway quota ledger and Bifrost governance remain
+the respective financial owners.
 
 The client uses only a bounded literal Unix `control.sock`, with no ambient
 proxy or redirects. Rust verifies its kernel peer UID. Calls have a two-second
@@ -38,9 +38,9 @@ with only a synthetic request and socket; it proves the actual Go↔Rust codec,
 prepared acquisition/cancel and the real activation fence with disposable PG.
 No database credentials, real user data or inference endpoint reach that probe.
 
-The public provider harness is exempt for this increment: no HTTP request can
-reach this unregistered library. Hook integration must add its wire regressions
-when it is connected. Target-specific normalization, actual dispatcher CAS,
+The original client-only increment had no reachable HTTP path and qualified for
+the public-provider-harness exemption. The later nullable HTTP runtime below
+adds wire regressions and harness cases for its now-reachable composition. Target-specific normalization, actual dispatcher CAS,
 terminal evidence/uncertain recovery, all entrance paths and a fixed release
 remain required before deployment. This library is not whole-stack qualification.
 
@@ -253,3 +253,13 @@ receipt compatibility, async/WebSocket and other native shapes, engine abort and
 crash/unknown financial recovery, declaration loader, full-source release and
 rollback qualification. Do not enable this composition merely because its
 synthetic HTTP and authorization tests pass.
+
+Fixed runtime source `8b0d3e47b4978fcba7f36b90749e00decaac0a7d` passed
+50 admission race events (three separately owned probes skipped), 26 SDK/HTTP
+events, 18 selected core events, 1099 schema events and vet. The eight HTTP
+positive shapes passed three repetitions (24 leaf cases); six denial shapes
+kept original counters unchanged. The [runtime receipt](evidence/managed-http-provenance-20261102.json)
+keeps these synthetic HTTP proofs separate from the [new paired Gateway/Go
+verifier proof](evidence/gateway-delegation-paired-8b0d3e4-20261102.json), which
+uses two actual Gateway HTTP calls and two original ledger rows but does not
+traverse the Bifrost HTTP factory. Both disposable paired containers were removed.
