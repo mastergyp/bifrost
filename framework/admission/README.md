@@ -484,3 +484,31 @@ compatibility, abort/unknown-work recovery, native TCP pool Linux stress and
 full fixed Linux release/rollback remain. Public standalone CLI cannot install
 this embedded runtime, so the paid harness cannot trigger the new branch;
 owned actual canonical HTTP tests cover it. No paid provider calls were run.
+
+
+### Historical dispatch cancellation evidence (candidate, 2026-11-02)
+
+The original Rust controller's cancellation result checked only currently active
+work. A finished request could consequently return `never_dispatched=true` and
+have its queue history overwritten. Gateway source `a82955cfea4c43aa846dd4eec532cd12723154a5`
+now checks historical dispatch timestamps and dispatched/uncertain/finished state
+under the same namespace lock as dispatch CAS before mutating cancellation state.
+The owned PostgreSQL regression reproduced the original failure, then passed
+with the fix and 16 cancellation/dispatch races. Prepared cancellation stays
+idempotent; completed or uncertain work is never relabelled as unexecuted.
+
+`Ticket.ConfirmNeverDispatched` requires protocol1 plus explicit
+`no_dispatch_evidence_version=2` and a non-null result. Legacy cancellation replies
+are still usable for cleanup, but cannot approve a financial no-dispatch receipt.
+The actual Go→Rust inference probe checks that a post-execution confirmation is
+false. Eight owned negative/compatibility cases cover old and malformed replies.
+
+See [summary](evidence/historical-dispatch-20261102.json) and
+[fixed-source owned receipt](evidence/historical-dispatch-owned-20261102.json).
+The qualified pair is Gateway a82955c / Bifrost 4c25832; 76 admission race pass
+events/3 ordinary owned skips and 55 HTTP fixture pass events/1 ordinary owned
+skip passed, with vet and strict Rust checks. The real owned Rust controller and
+synthetic sender passed 100 concurrent capacity requests, 16 cancel/dispatch races,
+8 Bifrost HTTP producer cases and the separate 2-call Gateway ledger fixture.
+This is not yet a signed return receipt, the same request across both real HTTP
+frontends, durable financial handoff or production loader activation.
