@@ -262,7 +262,7 @@ func extractControls(raw []byte) (map[string]json.RawMessage, error) {
 	}
 	return controls, nil
 }
-func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest) *schemas.LLMPluginShortCircuit {
+func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest) (result *schemas.LLMPluginShortCircuit) {
 	principal := AdmittedPrincipal(ctx)
 	if ctx == nil || r == nil || principal == nil || principal.source.Alias == "" {
 		return producerError(403, "managed original principal required")
@@ -387,16 +387,26 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 		ctx.SetRoutingInfoSnapshot(actualRoute.RoutingInfo())
 		return map[string]string{"X-SW-Admission-Id": operation.ID, "X-SW-Admission-Owner": operation.Owner, "X-SW-Admission-Alias": operation.Alias}, nil
 	}
-	cleanupPrepared := func() {
+	cleanupPrepared := func(confirm bool) bool {
 		if ticket != nil {
 			cleanup, done := context.WithTimeout(context.Background(), time.Second)
 			defer done()
+			if confirm {
+				confirmed, err := ticket.ConfirmNeverDispatched(cleanup)
+				return err == nil && confirmed
+			}
 			_, _ = ticket.Cancel(cleanup)
 		}
+		return false
 	}
 	defer func() {
 		if !transferred {
-			cleanupPrepared()
+			confirmed := cleanupPrepared(result != nil && result.Error != nil)
+			if confirmed && principal.delegation != nil {
+				if envelope, ok := ctx.Value(gatewayProofKey).(*gatewayEnvelope); ok && envelope != nil && envelope.proof == principal.delegation {
+					envelope.noDispatch.Store(true)
+				}
+			}
 		}
 	}()
 	url := "http://localhost/inference" + string(api)
@@ -439,7 +449,7 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 	retained = true
 	transferred = true
 	go func() {
-		defer func() { cleanupPrepared(); owned.Cancel(); p.leave(); close(output) }()
+		defer func() { cleanupPrepared(false); owned.Cancel(); p.leave(); close(output) }()
 		for chunk := range stream {
 			select {
 			case output <- chunk:

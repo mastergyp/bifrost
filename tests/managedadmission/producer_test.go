@@ -62,10 +62,13 @@ func (p *fundedPreparation) AuthorizeSelected(ctx *schemas.BifrostContext, princ
 }
 
 type ownedSocket struct {
-	mu       sync.Mutex
-	requests map[string]map[string]any
-	data     int
-	bad      bool
+	mu                  sync.Mutex
+	requests            map[string]map[string]any
+	data                int
+	bad                 bool
+	cancelVersion       int
+	confirmCancellation bool
+	cancelStatus        int
 }
 
 func ownedPhysicalSocket(t *testing.T) (*admission.Client, *ownedSocket) {
@@ -106,7 +109,14 @@ func ownedPhysicalSocket(t *testing.T) (*admission.Client, *ownedSocket) {
 			_ = json.NewDecoder(r.Body).Decode(&input)
 			write(map[string]any{"protocol": 1, "decision": map[string]any{"status": "granted", "lease": admission.Lease{ID: input.Request.ID, Pool: "home", Engine: "owned-engine", State: "prepared"}}})
 		case "/v1/cancel":
-			write(map[string]any{"protocol": 1, "never_dispatched": false})
+			state.mu.Lock()
+			version, confirmed, status := state.cancelVersion, state.confirmCancellation, state.cancelStatus
+			state.mu.Unlock()
+			if status != 0 {
+				w.WriteHeader(status)
+				return
+			}
+			write(map[string]any{"protocol": 1, "never_dispatched": confirmed, "no_dispatch_evidence_version": version})
 		case "/inference/v1/chat/completions", "/inference/v1/responses":
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
@@ -222,6 +232,9 @@ func exerciseConcreteCall(t *testing.T, control *admission.Client, pool string, 
 	response, err := client.Do(request)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if response.Header.Get(admission.NoDispatchHeader) != "" {
+		t.Fatal("successful managed execution carried a no-dispatch receipt")
 	}
 	if response.StatusCode != 200 {
 		data, _ := io.ReadAll(response.Body)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/maximhq/bifrost/core/schemas"
@@ -39,8 +40,9 @@ type NativeModelAlias struct {
 }
 
 type gatewayEnvelope struct {
-	proof  *VerifiedDelegation
-	source RuntimeModel
+	proof      *VerifiedDelegation
+	source     RuntimeModel
+	noDispatch atomic.Bool
 }
 
 // Principal is a small admitted handle, not request/stream storage. Only this
@@ -558,11 +560,20 @@ func (r *Runtime) WrapHTTP(next fasthttp.RequestHandler) fasthttp.RequestHandler
 			if wire.Model != string(model.Provider)+"/"+model.Model {
 				break
 			}
-			ctx.SetUserValue(gatewayProofKey, &gatewayEnvelope{proof: proof, source: model})
+			envelope := &gatewayEnvelope{proof: proof, source: model}
+			ctx.SetUserValue(gatewayProofKey, envelope)
 			defer ctx.RemoveUserValue(gatewayProofKey)
 			ctx.Request.URI().SetPath("/openai" + string(api))
 			defer ctx.Request.URI().SetPath(path)
 			next(ctx)
+			// Remove any provider/plugin-supplied imitation. Only our exact final
+			// serialized rejection and confirmed original call can carry a token.
+			ctx.Response.Header.Del(NoDispatchHeader)
+			if envelope.noDispatch.Load() && !ctx.Response.IsBodyStream() {
+				if token := r.verifier.signRejection(proof, ctx.Response.StatusCode(), ctx.Response.Body(), time.Now()); token != "" {
+					ctx.Response.Header.Set(NoDispatchHeader, token)
+				}
+			}
 			return
 		}
 		gatewayHTTPError(ctx, 403, "GATEWAY_SOURCE_MISMATCH")

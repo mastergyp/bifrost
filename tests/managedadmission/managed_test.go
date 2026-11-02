@@ -41,7 +41,7 @@ import (
 
 const model = "gpt-4o" // committed pricing fixture, not a real inference target
 const vkID = "owned-native-vk"
-const vkValue = "owned-test-only-credential"
+const vkValue = "sk-bf-owned-test-only-credential"
 
 type account struct{ keys atomic.Int64 }
 
