@@ -177,6 +177,7 @@ func LoadProfile(ctx context.Context, path string, lookup func(string) (string, 
 		return nil, err
 	}
 	installed = true
+	runtime.rejections = client
 	return runtime, nil
 }
 
@@ -283,13 +284,14 @@ func (c *Client) checkPreparation(ctx context.Context) error {
 		Enforcement              string `json:"routing_enforcement"`
 		AbsoluteDeadline         bool   `json:"absolute_queue_deadline"`
 		PreparationPolicyVersion int    `json:"preparation_policy_version"`
+		DurableRejectionVersion  int    `json:"durable_rejection_version"`
 		Namespace                string `json:"namespace"`
 		ContractSHA256           string `json:"contract_sha256"`
 	}
 	if err := c.call(ctx, "health", nil, &health); err != nil {
 		return err
 	}
-	if health.Protocol != 1 || health.State != "ready" || health.Enforcement != "enabled" || !health.AbsoluteDeadline || health.PreparationPolicyVersion != 1 || c.authority == nil || health.Namespace != c.authority.namespace || health.ContractSHA256 != c.authority.contract {
+	if health.Protocol != 1 || health.State != "ready" || health.Enforcement != "enabled" || !health.AbsoluteDeadline || health.PreparationPolicyVersion != 1 || health.DurableRejectionVersion != 1 || c.authority == nil || health.Namespace != c.authority.namespace || health.ContractSHA256 != c.authority.contract {
 		return ErrNotEnforced
 	}
 	return nil

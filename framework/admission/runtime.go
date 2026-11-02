@@ -2,12 +2,14 @@ package admission
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/valyala/fasthttp"
 )
@@ -131,12 +133,13 @@ func AdmittedPrincipal(ctx *schemas.BifrostContext) *Principal {
 // The inner producer must enforce physical capacity, target contracts and usage;
 // this wrapper alone is not release qualification for those responsibilities.
 type Runtime struct {
-	inner     schemas.ManagedInference
-	native    *NativeAuthorizer
-	verifier  *DelegationVerifier
-	models    []RuntimeModel
-	sharedIDs map[string]bool
-	aliases   []NativeModelAlias
+	rejections *Client
+	inner      schemas.ManagedInference
+	native     *NativeAuthorizer
+	verifier   *DelegationVerifier
+	models     []RuntimeModel
+	sharedIDs  map[string]bool
+	aliases    []NativeModelAlias
 }
 
 func NewRuntime(inner schemas.ManagedInference, native *NativeAuthorizer, verifier *DelegationVerifier, models []RuntimeModel, sharedLegacyVKIDs []string, nativeAliases ...NativeModelAlias) (*Runtime, error) {
@@ -546,6 +549,26 @@ func (r *Runtime) WrapHTTP(next fasthttp.RequestHandler) fasthttp.RequestHandler
 			gatewayHTTPError(ctx, 401, "GATEWAY_DELEGATION_REQUIRED")
 			return
 		}
+		var envelope *gatewayEnvelope
+		defer func() {
+			// Neither an HTTP error nor a provider header is no-I/O evidence.
+			// Before enqueue, an atomic tombstone must prohibit future replay.
+			ctx.Response.Header.Del(NoDispatchHeader)
+			if ctx.Response.IsBodyStream() || ctx.Response.StatusCode() < 400 || ctx.Response.StatusCode() > 599 {
+				return
+			}
+			confirmed := envelope != nil && envelope.noDispatch.Load()
+			if !confirmed && r.rejections != nil {
+				cleanup, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+				defer cancel()
+				confirmed, _ = r.rejections.rejectUnused(cleanup, proof.claims.CallID, uuid.NewString())
+			}
+			if confirmed {
+				if token := r.verifier.signRejection(proof, ctx.Response.StatusCode(), ctx.Response.Body(), time.Now()); token != "" {
+					ctx.Response.Header.Set(NoDispatchHeader, token)
+				}
+			}
+		}()
 		var wire struct {
 			Model string `json:"model"`
 		}
@@ -560,20 +583,12 @@ func (r *Runtime) WrapHTTP(next fasthttp.RequestHandler) fasthttp.RequestHandler
 			if wire.Model != string(model.Provider)+"/"+model.Model {
 				break
 			}
-			envelope := &gatewayEnvelope{proof: proof, source: model}
+			envelope = &gatewayEnvelope{proof: proof, source: model}
 			ctx.SetUserValue(gatewayProofKey, envelope)
 			defer ctx.RemoveUserValue(gatewayProofKey)
 			ctx.Request.URI().SetPath("/openai" + string(api))
 			defer ctx.Request.URI().SetPath(path)
 			next(ctx)
-			// Remove any provider/plugin-supplied imitation. Only our exact final
-			// serialized rejection and confirmed original call can carry a token.
-			ctx.Response.Header.Del(NoDispatchHeader)
-			if envelope.noDispatch.Load() && !ctx.Response.IsBodyStream() {
-				if token := r.verifier.signRejection(proof, ctx.Response.StatusCode(), ctx.Response.Body(), time.Now()); token != "" {
-					ctx.Response.Header.Set(NoDispatchHeader, token)
-				}
-			}
 			return
 		}
 		gatewayHTTPError(ctx, 403, "GATEWAY_SOURCE_MISMATCH")

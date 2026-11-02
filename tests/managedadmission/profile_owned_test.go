@@ -133,7 +133,10 @@ func TestOwnedConfiguredProfileThroughActualRustPlanner(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				f.client.Shutdown()
+				defer f.client.Shutdown()
+				if streaming {
+					f.client.Shutdown()
+				}
 				data := f.store.GetGovernanceData(context.Background())
 				rate := data.RateLimits["original-rate"]
 				expected := f.catalog.CalculateCost(&schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{Model: targetModel, Usage: &schemas.BifrostLLMUsage{PromptTokens: 5, CompletionTokens: 2, TotalTokens: 7}, ExtraFields: schemas.BifrostResponseExtraFields{RequestType: schemas.ChatCompletionRequest, Provider: schemas.OpenAI, OriginalModelRequested: model, ResolvedModelUsed: targetModel}}}, nil)
@@ -142,6 +145,29 @@ func TestOwnedConfiguredProfileThroughActualRustPlanner(t *testing.T) {
 				}
 				if f.account.keys.Load() != 0 {
 					t.Fatal("profile nested into provider worker/key selection")
+				}
+				if gateway && !streaming {
+					invalid, _ := json.Marshal(map[string]any{"model": "openai/" + model, "messages": []any{map[string]any{"role": "user", "content": "owned invalid prompt"}}, "max_completion_tokens": 17})
+					proof := profileOwnedToken(string(admission.Chat), invalid, "")
+					for attempt := 0; attempt < 2; attempt++ {
+						retry, _ := http.NewRequest("POST", base+path, bytes.NewReader(invalid))
+						retry.Header.Set("Authorization", "Bearer "+vkValue)
+						retry.Header.Set("Content-Type", "application/json")
+						retry.Header.Set(admission.DelegationHeader, proof)
+						denied, err := client.Do(retry)
+						if err != nil {
+							t.Fatal(err)
+						}
+						io.Copy(io.Discard, denied.Body)
+						denied.Body.Close()
+						if denied.StatusCode < 400 || !strings.HasPrefix(denied.Header.Get(admission.NoDispatchHeader), "swnd1.") {
+							t.Fatalf("pre-ticket rejection missing durable receipt, attempt=%d status=%d", attempt, denied.StatusCode)
+						}
+					}
+					after := f.store.GetGovernanceData(context.Background())
+					if after.RateLimits["original-rate"].TokenCurrentUsage != 44 || math.Abs(after.Budgets["original-budget"].CurrentUsage-(13.25+expected)) > 1e-9 {
+						t.Fatal("pre-ticket failure charged model tokens or cost")
+					}
 				}
 			})
 		}

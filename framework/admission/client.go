@@ -96,6 +96,32 @@ func (t *Ticket) ConfirmNeverDispatched(ctx context.Context) (bool, error) {
 	return *reply.NeverDispatched, nil
 }
 
+// rejectUnused is only installed by the qualified profile loader. A durable
+// tombstone is stronger than checking that a not-yet-enqueued call is absent:
+// it serializes with admission and prevents every later replay of that CallID.
+func (c *Client) rejectUnused(ctx context.Context, id, owner string) (bool, error) {
+	if c == nil || c.authority == nil || !validUUID(id) || !validUUID(owner) {
+		return false, ErrNotEnforced
+	}
+	var reply struct {
+		Protocol        int   `json:"protocol"`
+		NeverDispatched *bool `json:"never_dispatched"`
+		EvidenceVersion int   `json:"no_dispatch_evidence_version"`
+	}
+	err := c.call(ctx, "reject-unused", struct {
+		Protocol int    `json:"protocol"`
+		ID       string `json:"id"`
+		Owner    string `json:"owner"`
+	}{1, id, owner}, &reply)
+	if err != nil {
+		return false, err
+	}
+	if reply.Protocol != 1 || reply.NeverDispatched == nil || reply.EvidenceVersion != 3 {
+		return false, ErrNotEnforced
+	}
+	return *reply.NeverDispatched, nil
+}
+
 type controlAuthority struct{ namespace, contract string }
 
 func (c *Client) setAuthority(set func(string, string)) {

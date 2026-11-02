@@ -37,7 +37,7 @@ func profileSocket(t *testing.T, prepare http.HandlerFunc, policyVersion int, ch
 		if rNamespace := r.Header.Get("X-SW-Admission-Namespace"); rNamespace != profileNamespace {
 			t.Error("controller request omitted the immutable namespace")
 		}
-		health := map[string]any{"protocol": 1, "state": "ready", "routing_enforcement": "enabled", "absolute_queue_deadline": true, "preparation_policy_version": policyVersion, "namespace": profileNamespace, "contract_sha256": strings.Repeat("a", 64)}
+		health := map[string]any{"protocol": 1, "state": "ready", "routing_enforcement": "enabled", "absolute_queue_deadline": true, "preparation_policy_version": policyVersion, "durable_rejection_version": 1, "namespace": profileNamespace, "contract_sha256": strings.Repeat("a", 64)}
 		for _, change := range changeHealth {
 			change(health)
 		}
