@@ -1,5 +1,7 @@
 # Shared physical admission protocol client
 
+Current startup integration: the standalone HTTP server can now load the operator-owned managed profile after original governance. It requires exact controller authority and a Rust preparation capability that is not yet deployed; production automatic overflow remains off. See [startup contract and current limits](PROFILE-STARTUP-20261102.md). The following early candidate description is historical.
+
 Candidate client, authorization library and nullable HTTP runtime. The factory can
 compose that runtime, while the standalone CLI installs none and a qualified
 production-qualified physical producer is still pending. No production configuration, Key or Grant was
