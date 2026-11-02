@@ -18,6 +18,7 @@ import (
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/admission"
+	"github.com/valyala/fasthttp"
 )
 
 func checkRejection(t *testing.T, response *http.Response, body []byte, original string) {
@@ -139,7 +140,11 @@ func TestOwnedGatewayRejectionServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := fixtureWithInner(t, false, true, producer, "qwen")
-	base, _ := ownedHTTP(t, f)
+	base, _ := ownedHTTP(t, f, func(ctx *fasthttp.RequestCtx) {
+		if bytes.Contains(ctx.PostBody(), []byte("tamper-receipt")) {
+			ctx.Response.Header.Set(admission.NoDispatchHeader, "swnd1.forged.invalid")
+		}
+	})
 	fmt.Println("OWNED_BIFROST_REJECTION_READY " + base)
 	done := make(chan struct{})
 	go func() { _, _ = io.ReadFull(os.Stdin, make([]byte, 1)); close(done) }()

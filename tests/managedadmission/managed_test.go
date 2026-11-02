@@ -344,7 +344,7 @@ func TestExhaustedOriginalBudgetCannotReachManagedInference(t *testing.T) {
 	}
 }
 
-func ownedHTTP(t *testing.T, f *fixture) (string, *http.Client) {
+func ownedHTTP(t *testing.T, f *fixture, after ...func(*fasthttp.RequestCtx)) (string, *http.Client) {
 	t.Helper()
 	config := &lib.Config{ClientConfig: &configstore.ClientConfig{}, ModelCatalog: f.catalog}
 	r := router.New()
@@ -356,7 +356,13 @@ func ownedHTTP(t *testing.T, f *fixture) (string, *http.Client) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wire := &fasthttp.Server{Handler: server.ManagedRouterHandler()}
+	handler := server.ManagedRouterHandler()
+	wire := &fasthttp.Server{Handler: func(ctx *fasthttp.RequestCtx) {
+		handler(ctx)
+		for _, hook := range after {
+			hook(ctx)
+		}
+	}}
 	stopped := make(chan struct{})
 	go func() { defer close(stopped); _ = wire.Serve(listener) }()
 	t.Cleanup(func() {
