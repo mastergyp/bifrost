@@ -1,0 +1,90 @@
+{
+  "gateway_qualified_source": "37c1dd837105e882d8fe12588f397d8c3100fa5d",
+  "bifrost_qualified_source": "2aa26741e696c69599d000b40c521f1921276b4e",
+  "signed_rejection": {
+    "requires_confirmed_version2_never_dispatched": true,
+    "domain": "sw-gateway-no-dispatch-v1\\0",
+    "bound_fields": [
+      "key_id",
+      "root_id",
+      "call_id",
+      "purpose",
+      "api",
+      "request_hash",
+      "response_hash",
+      "status",
+      "outcome",
+      "issued_at_ms",
+      "expires_at_ms"
+    ],
+    "maximum_lifetime_ms": 30000,
+    "clock_skew_ms": 2000,
+    "maximum_token_bytes": 4096,
+    "maximum_response_bytes": 1048576,
+    "unconfirmed_ack_or_old_controller_cannot_sign": true,
+    "success_or_SSE_cannot_carry_receipt": true,
+    "private_token_hidden_from_callers": true
+  },
+  "financial_mapping": {
+    "original_quota_and_ledger_retained": true,
+    "confirmed_no_dispatch_outcome": "upstream_not_dispatched",
+    "unverified_managed_outcome": "upstream_dispatch_unconfirmed",
+    "unverified_preserves_original_reserved_allocation": true,
+    "unconfirmed_ledger_actual_units_semantics": "provisional original budget hold, NOT verified model cost; zero token counts are not proof of zero execution",
+    "unknown_reconciliation_implemented": false,
+    "settlement_atomicity_or_crash_recovery_proven": false,
+    "signed_receipt_persisted_for_durable_replay": false,
+    "legacy_unsigned_behavior_changed": false
+  },
+  "qualification": {
+    "go_race": {
+      "github.com/maximhq/bifrost/framework/admission": {
+        "pass": 76,
+        "skip": 3
+      },
+      "github.com/mastergyp/bifrost-tests/managedadmission": {
+        "pass": 72,
+        "skip": 2
+      }
+    },
+    "rust_ordinary_passed": 122,
+    "rust_ordinary_opt_in_ignored": 7,
+    "capacity_concurrent_requests": 100,
+    "cancel_dispatch_races": 16,
+    "bifrost_only_positive_native_signed_http_cases": 8,
+    "dual_actual_http_frontend_cases": 8,
+    "dual_confirmed_zero_usage_ledger_rows": 4,
+    "dual_tampered_receipt_original_hold_rows": 4,
+    "dual_model_io": 0,
+    "dual_scope": "loopback Axum original Gateway proxy after authenticated-policy fixture, actual Bifrost HTTP factory/original governance, real Unix Rust controller; Chat/Responses unary and streaming-requested pre-model refusals; no real IdP or positive SSE generation",
+    "separate_original_gateway_positive_ledger_rows": 2,
+    "owned_containers_removed": 2,
+    "active_at_end": 0,
+    "owned_schema_removed": true,
+    "real_model_calls": 0,
+    "production_accessed": false
+  },
+  "raw_owned_receipt_sha256": "d83cdc58833ce24355853513d6b59c2316d87790ce0f2a033a133caf55f48567",
+  "earlier_attempts": [
+    {
+      "directory": "sw-rejection-dual-http-r1",
+      "passed": false,
+      "reason": "owned Gateway qwen logical capacity row missing; stopped before Bifrost; two containers cleaned",
+      "counts_as_runtime_red_green": false
+    },
+    {
+      "directory": "sw-rejection-dual-http-r2",
+      "passed": true,
+      "scope": "four confirmed rejection cases only; not final tampered-receipt financial qualification"
+    }
+  ],
+  "production_activated": false,
+  "remaining": [
+    "original financial owner durable/replayable reconciliation and process-crash recovery for unconfirmed holds",
+    "pre-ticket refusal outcome coverage",
+    "same dual frontend successful unary/SSE and actual employee identity",
+    "immutable production registry/quality/context/health policy and loader",
+    "common images/cache and engine abort/unknown execution",
+    "native TCP Linux stress and full fixed Linux paired release/backup/restore/rollback"
+  ]
+}

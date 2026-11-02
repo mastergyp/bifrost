@@ -1,0 +1,43 @@
+{
+  "passed": true,
+  "gateway_revision": "37c1dd837105e882d8fe12588f397d8c3100fa5d",
+  "bifrost_revision": "2aa26741e696c69599d000b40c521f1921276b4e",
+  "go_probe_sha256": "4ba8332e41a93cd10787ffb07ee8c1a63e80f9340cd98db56c370c0d0a672fc6",
+  "executor_sha256": "fc674f212cfee4697e2f3b2c46fc68a0a8f28d6bd4791571d085338d33f6d55e",
+  "postgres_image": "sha256:108b27c919e6e7bc124350fb265deea9adac58e118eade428c6d1ad44b90debe",
+  "redis_image": "sha256:aa189b5a1954929c393585e6dc5717a75b18f75a931df8bdcc00a3d3bd546be6",
+  "owned_containers_removed": 2,
+  "production_accessed": false,
+  "real_model_calls": 0,
+  "paired_gateway_request_bifrost_http_factory_exercised": true,
+  "production_physical_producer_registered": false,
+  "owned_bifrost_http_rust_producer_qualified": true,
+  "whole_model_routing_release_qualified": false,
+  "markers": [
+    {
+      "actual_upstream_calls": 2,
+      "caller_token_ignored": true,
+      "cross_language_go_verifier": true,
+      "original_ledger_rows": 2,
+      "original_scope_preserved": true,
+      "owned_gateway_http_delegation_passed": true,
+      "raw_controls_frozen": true
+    }
+  ],
+  "original_completed_ledger_rows": 2,
+  "gateway_http_log_sha256": "6592cf7ee0a133d7a6b23035b2aab4aeeac420db3e329185f942b938395d7819",
+  "owned_physical_control": {
+    "passed": true,
+    "absolute_deadline_checked": true,
+    "actual_go_rust_mock_inference_passed": true,
+    "actual_bifrost_http_rust_producer_cases": 8,
+    "selected_target_denial_before_data_checked": true,
+    "historical_dispatch_cancellation_checked": true,
+    "cancel_dispatch_races": 16,
+    "paired_actual_frontend_rejections": 8,
+    "paired_scope": "4 confirmed and4 tampered Chat/Responses unary/streaming-requested refusals after authenticated policy fixture; real IdP, successful generation and durable reconciliation not covered",
+    "producer_probe_sha256": "deb3355688a75794d7a741fb2c16d0659d9937b8ca5f2fa3e3409b202410990a",
+    "original_regressions_log_sha256": "f4df60cd86308095a9b135e38d9da2239cb3f3cd3008c0ae80c9049147482d4e",
+    "control_log_sha256": "eaf0f951bfbcd19ac756ba1050657de15d7e24e5f05f81cdd3d74e412dfa3f18"
+  }
+}

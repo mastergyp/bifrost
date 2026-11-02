@@ -512,3 +512,47 @@ synthetic sender passed 100 concurrent capacity requests, 16 cancel/dispatch rac
 8 Bifrost HTTP producer cases and the separate 2-call Gateway ledger fixture.
 This is not yet a signed return receipt, the same request across both real HTTP
 frontends, durable financial handoff or production loader activation.
+
+
+### Signed pre-dispatch refusals and original Gateway holds (candidate)
+
+The concrete producer now marks a refusal only after its exact original ticket
+receives the controller's v2 no-historical-dispatch confirmation. The private HTTP
+wrapper signs the final nonstream error response after serialization, removing
+provider/plugin imitations. Success and SSE are never certified as unexecuted.
+Pre-ticket refusals cannot yet issue this proof.
+
+`X-SW-No-Dispatch-Token` binds the original root/call IDs, key slot, purpose, API,
+request digest, final response-body digest, HTTP status and a 30-second lifetime.
+The HMAC direction domain is `sw-gateway-no-dispatch-v1\0`; body hashing uses
+`sw-gateway-rejection-body-v1\0`. The original Gateway checks exact claims/bytes,
+canonical base64, constant-time MAC and strict JSON before writing zero usage to
+its existing quota/ledger. Private return headers are hidden from the caller.
+Unverified managed failures retain their original budget allocation under explicit
+`upstream_dispatch_unconfirmed`, with no fabricated token counts. In that state,
+the old ledger actual_units column represents an unresolved hold, not final cost.
+Legacy unsigned behavior is unchanged; this is not production activation.
+
+Qualified source pair: Gateway37c1dd837105e882d8fe12588f397d8c3100fa5d /
+Bifrost2aa26741e696c69599d000b40c521f1921276b4e. Eight same-request cases traverse
+actual loopback Gateway HTTP after an authenticated-policy fixture, actual Bifrost
+HTTP factory/original governance and real Unix Rust controller: four valid receipts
+release the original positive reserve with zero usage; four receipts corrupted after
+the Bifrost handler preserve the original allocation. Redis minute/day/month totals
+match the original ledger; no model I/O. Chat/Responses unary and stream-requested
+*refusals before SSE* are covered. Real IdP and positive/SSE generation across both
+frontends are not. Earlier four-case qualification is not relabelled as this result.
+
+See [summary](evidence/signed-rejection-20261102.json) and [fixed-source receipt](evidence/signed-rejection-owned-20261102.json).
+The existing8 positive Bifrost-only cases,100 capacity requests,16 cancel races,
+122 ordinary Rust checks/7 opt-in ignored,76 admission race pass events/3 owned
+skips and72 HTTP-SDK pass events/2 owned skips pass; two owned containers/schema
+are removed and active work is0. A first fixture lacked its Gateway logical capacity
+row and failed before Bifrost; that failure is retained, not runtime red/green proof.
+
+Durable receipt storage/replay, unresolved-hold reconciliation, atomic financial
+crash recovery, pre-ticket refusals, full positive dual-frontends/identity, production
+registry/health/quality/context loader, common images/cache and complete fixed
+Linux release/restore remain required. Existing Redis→PG settlement is still not an
+atomic transaction. Do not activate by treating this bounded receipt test as full
+financial recovery qualification.
