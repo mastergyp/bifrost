@@ -176642,6 +176642,206 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "129. Managed Gateway provenance (fork PR #1)",
+      "description": "Default fail-closed Gateway-only channel. All five requests are rejected before provider inference. Valid signatures, original grants, cancellation accounting and provider-rewrite fencing are additionally covered by owned real HTTP/SDK fixtures; this does not qualify the physical producer or production activation.",
+      "item": [
+        {
+          "name": "openai gpt-4o-mini managed-provenance chat unary missing proof - fork PR #1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"Owned auth-only probe\"}],\"max_tokens\":1,\"stream\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sw/gateway/v1/chat/completions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Managed Gateway rejects missing proof before inference', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.eql(401);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.error.type).to.eql('managed_gateway_error');",
+                  "  pm.expect(body.error.code).to.eql('GATEWAY_DELEGATION_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "openai gpt-4o-mini managed-provenance chat stream missing proof - fork PR #1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"Owned auth-only probe\"}],\"max_tokens\":1,\"stream\":true}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sw/gateway/v1/chat/completions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Managed Gateway rejects missing proof before inference', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.eql(401);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.error.type).to.eql('managed_gateway_error');",
+                  "  pm.expect(body.error.code).to.eql('GATEWAY_DELEGATION_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "openai gpt-4o-mini managed-provenance responses unary missing proof - fork PR #1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-4o-mini\",\"input\":\"Owned auth-only probe\",\"max_output_tokens\":1,\"stream\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sw/gateway/v1/responses"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Managed Gateway rejects missing proof before inference', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.eql(401);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.error.type).to.eql('managed_gateway_error');",
+                  "  pm.expect(body.error.code).to.eql('GATEWAY_DELEGATION_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "openai gpt-4o-mini managed-provenance responses stream missing proof - fork PR #1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-4o-mini\",\"input\":\"Owned auth-only probe\",\"max_output_tokens\":1,\"stream\":true}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sw/gateway/v1/responses"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Managed Gateway rejects missing proof before inference', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.eql(401);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.error.type).to.eql('managed_gateway_error');",
+                  "  pm.expect(body.error.code).to.eql('GATEWAY_DELEGATION_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "openai gpt-4o-mini managed-provenance native channel rejects delegation - fork PR #1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-SW-Gateway-Delegation-Token",
+                "value": "swgd1.invalid.signature"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"Owned auth-only probe\"}],\"max_tokens\":1}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/chat/completions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Delegation cannot enter through native service identity', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.eql(401);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.error.type).to.eql('managed_gateway_error');",
+                  "  pm.expect(body.error.code).to.eql('GATEWAY_CHANNEL_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

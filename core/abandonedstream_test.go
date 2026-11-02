@@ -2,6 +2,7 @@ package bifrost
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -669,6 +670,52 @@ func (m *managedProbe) Handle(_ *schemas.BifrostContext, req *schemas.BifrostReq
 }
 func (m *managedProbe) Close() { m.closed.Store(true) }
 
+type contextOnlyManagedProbe struct{ managedProbe }
+
+func (m *contextOnlyManagedProbe) Owns(schemas.ModelProvider) bool              { return false }
+func (m *contextOnlyManagedProbe) RequiresManaged(*schemas.BifrostContext) bool { return true }
+
+func TestTrustedManagedProvenanceCannotEscapeThroughAnUnownedProvider(t *testing.T) {
+	for _, streaming := range []bool{false, true} {
+		t.Run(fmt.Sprint(streaming), func(t *testing.T) {
+			var direct atomic.Int64
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				direct.Add(1)
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"id":"native-escape","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"direct"}}]}`))
+			}))
+			defer server.Close()
+			a := NewMockAccount()
+			a.AddProviderWithBaseURL(schemas.OpenAI, 1, 1, server.URL)
+			a.configs[schemas.OpenAI].NetworkConfig.MaxRetries = 0
+			a.SetKeysForProvider(schemas.OpenAI, []schemas.Key{{ID: "owned-test", Value: *schemas.NewSecretVar("test-only"), Models: schemas.WhiteList{"*"}, Weight: 100}})
+			probe := &contextOnlyManagedProbe{}
+			probe.stream = make(chan *schemas.BifrostStreamChunk, 1)
+			probe.stream <- &schemas.BifrostStreamChunk{FinalForAccounting: true, BifrostChatResponse: &schemas.BifrostChatResponse{ID: "managed", Usage: &schemas.BifrostLLMUsage{TotalTokens: 7}}}
+			close(probe.stream)
+			client, err := Init(context.Background(), schemas.BifrostConfig{Account: a, Logger: NewNoOpLogger(), ManagedInference: probe})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.Shutdown()
+			ctx := schemas.NewBifrostContext(context.Background(), time.Time{})
+			request := &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "owned-model", Input: []schemas.ChatMessage{{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: new("owned")}}}}
+			if streaming {
+				stream, _ := client.ChatCompletionStreamRequest(ctx, request)
+				if stream != nil {
+					for range stream {
+					}
+				}
+			} else {
+				_, _ = client.ChatCompletionRequest(ctx, request)
+			}
+			if direct.Load() != 0 || probe.calls.Load() != 1 {
+				t.Fatalf("trusted provenance escaped: native_http=%d managed=%d", direct.Load(), probe.calls.Load())
+			}
+		})
+	}
+}
+
 func TestManagedDispatchRunsAfterPreHooksBeforeAnyProviderRequest(t *testing.T) {
 	var direct atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -843,6 +890,62 @@ func TestManagedMismatchedResultCannotEscapeToProvider(t *testing.T) {
 			}
 			if bfErr == nil || bfErr.StatusCode == nil || *bfErr.StatusCode != 503 || bfErr.AllowFallbacks == nil || *bfErr.AllowFallbacks || direct.Load() != 0 {
 				t.Fatalf("malformed managed result escaped: error=%+v native_http=%d", bfErr, direct.Load())
+			}
+		})
+	}
+}
+
+type provenanceShortcutProbe struct {
+	managedProbe
+	checked atomic.Int64
+}
+
+func (p *provenanceShortcutProbe) ValidateShortcut(*schemas.BifrostContext, *schemas.BifrostRequest, *schemas.LLMPluginShortCircuit) *schemas.BifrostError {
+	p.checked.Add(1)
+	return managedFailure()
+}
+
+type provenanceCacheHook struct {
+	terminalHookCounter
+	stream bool
+}
+
+func (p *provenanceCacheHook) PreLLMHook(_ *schemas.BifrostContext, r *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	if p.stream {
+		ch := make(chan *schemas.BifrostStreamChunk, 1)
+		ch <- &schemas.BifrostStreamChunk{FinalForAccounting: true, BifrostChatResponse: &schemas.BifrostChatResponse{ID: "unqualified-cache"}}
+		close(ch)
+		return r, &schemas.LLMPluginShortCircuit{Stream: ch}, nil
+	}
+	return r, &schemas.LLMPluginShortCircuit{Response: &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{ID: "unqualified-cache"}}}, nil
+}
+func TestManagedPreHookShortcutsCannotSkipProvenancePolicy(t *testing.T) {
+	for _, streaming := range []bool{false, true} {
+		t.Run(fmt.Sprint(streaming), func(t *testing.T) {
+			a := NewMockAccount()
+			a.AddProvider(schemas.OpenAI, 1, 1)
+			probe := &provenanceShortcutProbe{}
+			hook := &provenanceCacheHook{stream: streaming}
+			client, err := Init(context.Background(), schemas.BifrostConfig{Account: a, Logger: NewNoOpLogger(), LLMPlugins: []schemas.LLMPlugin{hook}, ManagedInference: probe})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.Shutdown()
+			ctx := schemas.NewBifrostContext(context.Background(), time.Time{})
+			req := &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "owned", Input: []schemas.ChatMessage{{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: new("owned")}}}}
+			var bfErr *schemas.BifrostError
+			if streaming {
+				var output chan *schemas.BifrostStreamChunk
+				output, bfErr = client.ChatCompletionStreamRequest(ctx, req)
+				if output != nil {
+					for range output {
+					}
+				}
+			} else {
+				_, bfErr = client.ChatCompletionRequest(ctx, req)
+			}
+			if bfErr == nil || bfErr.StatusCode == nil || *bfErr.StatusCode != 503 || probe.checked.Load() != 1 || probe.calls.Load() != 0 {
+				t.Fatalf("pre-hook shortcut bypassed original-caller policy: denied=%t checked=%d producer=%d", bfErr != nil, probe.checked.Load(), probe.calls.Load())
 			}
 		})
 	}

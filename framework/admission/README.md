@@ -136,13 +136,13 @@ read response metadata while core rewrote it after post-hooks. Governance now
 prepares scalar cost/token facts synchronously and only persists those facts in
 the worker; later core/plugin mutations cannot change that update. Pricing panic
 containment remains in place. This changes no response bytes/status or cost
-formula; model-access helper and the optional executor remain unreachable from
-the current HTTP server factory. The public provider-harness exemption is limited
-to that absence of a reachable HTTP behavior change. Actual HTTP registration
-must add entrance/auth/usage wire regressions before release.
+formula. At fixed source 0ddb997, the helper/executor had no reachable HTTP
+factory path, so that historical increment qualified for the provider-harness
+exemption. The nullable runtime below now installs a guarded HTTP composition
+and ships corresponding entrance/auth/usage wire regressions and harness cases.
 
 
-## Gateway original-caller delegation (candidate, unregistered HTTP guard)
+## Gateway original-caller delegation (candidate, nullable HTTP runtime)
 
 `DelegationVerifier` verifies a short-lived, domain-separated HMAC-SHA256
 `X-SW-Gateway-Delegation-Token` against the exact POST/API/body bytes. It rejects
@@ -166,17 +166,12 @@ CallID as the durable one-shot request/CAS identity; generating a new request ID
 for each replay is invalid. RootID is the original quota/audit correlation. A
 missing explicit conversation remains nil, never a user/body/request-ID hash.
 Target budgets/keys, capability/quality/context and registry-generation binding
-are still mandatory. The HTTP server factory does not register this guard yet.
+are still mandatory. The HTTP factory now accepts an immutable nullable runtime composition. The standalone CLI still constructs none; a qualified physical producer and deployment loader remain pending.
 
 Do not globally reclassify a shared legacy VK as Gateway-only without its
 consumer inventory. A signed Gateway-only channel must distinguish employees
 from legitimate native service identities while preserving existing keys and
-financial owners. The source-to-wire-model mapping and all route shapes need
-real HTTP enforcement/wire regressions before cutover. This increment is a
-protocol/authorization component; no current HTTP request can reach the new
-verifier through the unmodified server factory, so its provider-harness exemption
-is limited to that fact. Do not interpret optional Gateway signature sending as
-physical routing enforcement.
+financial owners. The source-to-wire-model mapping and all route shapes still need complete deployment qualification before cutover. Earlier fixed-source verifier evidence was component-only; the runtime below now adds real HTTP factory wiring and corresponding provider-harness cases. Optional Gateway signature sending is not physical routing enforcement.
 
 Fixed-source qualification: verifier code `4fb6de9fd2e074c4598b799efd1e52e8b9e4d601`
 and Gateway source `e70b0a7ffa3e55d73a84fa854133e50fd593688f` passed the
@@ -189,3 +184,72 @@ or streaming delegation. The [verifier regression receipt](evidence/gateway-dele
 records 32 admission race pass events (three opt-in probes skipped separately),
 10 real-governance SDK regressions, vet and trace-header redaction. Policy caps
 are signed and verified, but their final routing enforcement remains pending.
+
+
+## Nullable HTTP runtime and original-caller boundary
+
+`Runtime` composes the verified Gateway channel and native original-Grant
+intersection with the existing managed SDK boundary. The server passes the same
+immutable runtime at initialization/reload, avoids a typed-nil interface, and uses
+`ManagedRouterHandler` before canonical routing. No JSON/UI option, standalone
+CLI loader or physical producer is installed by this increment. Production stays
+on the previously qualified versions; default native requests keep their route.
+
+The reserved `/sw/gateway/v1/chat/completions` and `/sw/gateway/v1/responses`
+require exact signed bytes and explicit registered provider/model. Successful
+validation reuses the existing OpenAI parser, original governance and serializers;
+it does not implement another model HTTP stack. A delegation token on ordinary
+native endpoints is rejected, preventing a misconfigured Gateway from becoming a
+broad native service identity. Query/provider/key/compat/async overrides are not
+accepted on the signed channel. Native explicit sessions are captured on the two
+OpenAI inference path families; unsupported shapes conservatively remain home-only.
+Only small immutable proof/principal handles enter context, never input/images or
+the token. Secret-bearing debug handles are redacted.
+
+The resolved VK row must still match the signing slot. Employee scope intersects
+that VK without replacing its original Limits. Shared legacy service IDs retain
+their native source-model access but cannot spill without delegation; they are
+not globally disabled or reclassified. Registration must cover every model on an
+owned provider before activation. Multiple aliases may share one identical pool
+and wire model; they cannot manufacture another pool authority or lose the
+signed source alias when deduplicating targets. A permitted pool is an authorization result,
+not capability, quality, target-budget/key or actual execution approval.
+
+Two real bypasses were reproduced before repair: context-pinned requests to an
+unowned provider made one native HTTP call and zero managed calls, and pre-hook
+shortcuts returned successful replies without a provenance policy check. Core now
+tracks context-pinned work even if a parser/hook selects an unowned provider and
+consults optional `ManagedShortcutPolicy` on successful managed pre-hook results.
+Ordinary hook errors keep their original status. The current runtime **rejects
+unqualified cached replies with 503** because no trusted receipt binds their
+actual target/scope/registry generation yet. Existing unconfigured caching is
+unchanged. Cached-result compatibility and a profile that forbids independent
+model execution inside pre-hooks are mandatory before production activation;
+this is a safety fence, not completed cache support.
+
+Owned tests use actual canonical HTTP routes, server handler composition, core,
+Grant, governance and response/SSE conversion, with an in-process synthetic
+managed producer. Native and signed Gateway × Chat and Responses × unary and
+cancelled SSE preserve nonzero original money/token/request counters exactly
+once, without provider-key selection. No Rust sender, GPU or production data is
+in this HTTP fixture. A test initially read the transport-owned response while
+its serializer populated defaults; expected pricing now uses an independent
+immutable value. This was a fixture race, not a claimed production cost fix.
+
+Five `managed-provenance` provider-harness cases pin missing-proof unary/streaming
+routes and wrong-channel token rejection; augment/filter validation selects all
+five and preserves existing folders. No live provider harness was launched. Its
+operator commands (pick an unused port and the standard profile) are:
+
+```sh
+make dev PORT=18493 APP_DIR=$(pwd)/tests/integrations/python
+make run-provider-harness-test PROVIDER=openai FEATURE="managed-provenance" BASE_URL=http://localhost:18493
+```
+
+Still required: concrete physical producer, immutable common registry/contracts,
+one original queue deadline and weight, durable CallID consumption, target
+finance/key/context/quality checks, common images before physical slots, cache
+receipt compatibility, async/WebSocket and other native shapes, engine abort and
+crash/unknown financial recovery, declaration loader, full-source release and
+rollback qualification. Do not enable this composition merely because its
+synthetic HTTP and authorization tests pass.

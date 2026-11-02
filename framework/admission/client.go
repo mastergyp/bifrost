@@ -2,7 +2,7 @@
 // by a pre-queue adapter. It does not authenticate users, grant model access,
 // select arbitrary URLs or certify upstream termination. A prepared ticket can
 // forward its exact bytes through the local sender; no provider is contacted here.
-// It is not registered in the Bifrost request pipeline yet.
+// The controller client is not yet installed as a concrete physical producer.
 package admission
 
 import (

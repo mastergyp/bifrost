@@ -21,6 +21,7 @@ import (
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/network"
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/admission"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/framework/encrypt"
@@ -234,6 +235,11 @@ type BifrostHTTPServer struct {
 	Client *bifrost.Bifrost
 	Config *lib.Config
 
+	// Deployment-owned immutable composition, assigned before initialization.
+	// No JSON/UI setting can manufacture trusted Gateway provenance. A concrete
+	// qualified producer and registry are required; nil preserves native dispatch.
+	ManagedAdmission *admission.Runtime
+
 	Server *fasthttp.Server
 	Router *router.Router
 
@@ -310,6 +316,19 @@ func NewBifrostHTTPServer(version string, uiContent embed.FS) *BifrostHTTPServer
 		LogLevel:       DefaultLogLevel,
 		LogOutputStyle: DefaultLogOutputStyle,
 	}
+}
+
+func (s *BifrostHTTPServer) managedInferenceBoundary() schemas.ManagedInference {
+	if s.ManagedAdmission == nil {
+		return nil // never pass a typed-nil runtime to core
+	}
+	return s.ManagedAdmission
+}
+
+// ManagedRouterHandler shares the exact ingress boundary with owned wire tests.
+// Existing canonical handlers still own parsing, governance and serialization.
+func (s *BifrostHTTPServer) ManagedRouterHandler() fasthttp.RequestHandler {
+	return s.ManagedAdmission.WrapHTTP(s.Router.Handler)
 }
 
 type GovernanceInMemoryStore struct {
@@ -1406,6 +1425,7 @@ func (s *BifrostHTTPServer) ReloadClientConfigFromConfigStore(ctx context.Contex
 			mcpConfig = s.Config.MCPConfig
 		}
 		s.Client.ReloadConfig(schemas.BifrostConfig{
+			ManagedInference:   s.managedInferenceBoundary(),
 			Account:            account,
 			InitialPoolSize:    s.Config.ClientConfig.InitialPoolSize,
 			DropExcessRequests: s.Config.ClientConfig.DropExcessRequests,
@@ -2820,6 +2840,7 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	// The account interface now benefits from ultra-fast config access times via in-memory storage
 	account := lib.NewBaseAccount(s.Config)
 	s.Client, err = bifrost.Init(ctx, schemas.BifrostConfig{
+		ManagedInference:   s.managedInferenceBoundary(),
 		Account:            account,
 		InitialPoolSize:    s.Config.ClientConfig.InitialPoolSize,
 		DropExcessRequests: s.Config.ClientConfig.DropExcessRequests,
@@ -3084,7 +3105,7 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	logger.Debug("server read buffer size: %d", s.Config.ServerConfig.ReadBufferSize)
 	// Create fasthttp server instance
 	s.Server = &fasthttp.Server{
-		Handler:            handlers.SecurityHeadersMiddleware()(s.CORSMiddleware.Middleware()(handlers.RequestDecompressionMiddleware(s.Config)(s.Router.Handler))),
+		Handler:            handlers.SecurityHeadersMiddleware()(s.CORSMiddleware.Middleware()(handlers.RequestDecompressionMiddleware(s.Config)(s.ManagedRouterHandler()))),
 		MaxRequestBodySize: s.Config.ClientConfig.MaxRequestBodySizeMB * 1024 * 1024,
 		ReadBufferSize:     s.Config.ServerConfig.ReadBufferSize,
 	}

@@ -5686,7 +5686,7 @@ func (bifrost *Bifrost) handleStreamRequest(ctx *schemas.BifrostContext, req *sc
 // It consolidates queue setup, plugin pipeline execution, enqueue logic, and response handling
 func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (managedResult *schemas.BifrostResponse, managedErr *schemas.BifrostError) {
 	provider, model, _ := req.GetRequestFields()
-	managedDone, admissionErr := bifrost.beginManaged(provider, req.RequestType)
+	managedDone, admissionErr := bifrost.beginManaged(ctx, provider, req.RequestType)
 	if admissionErr != nil {
 		return nil, admissionErr
 	}
@@ -5737,6 +5737,7 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 	// overwritten around RunPostLLMHooks — plugin modifications to these 4 fields are
 	// no-ops by design; proper request metadata is preserved and tampering is discouraged.
 	preReq, shortCircuit, preCount := pipeline.RunLLMPreHooks(ctx, req)
+	shortCircuit = bifrost.guardManagedShortcut(ctx, preReq, shortCircuit, managedDone != nil)
 	bifrost.endCoreSpan(prePipeSpan)
 	if shortCircuit == nil && preReq != nil {
 		shortCircuit = bifrost.managedBoundary(ctx, preReq, &managedDone, provider)
@@ -5988,7 +5989,7 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 // It consolidates queue setup, plugin pipeline execution, enqueue logic, and response handling
 func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (managedResult chan *schemas.BifrostStreamChunk, managedErr *schemas.BifrostError) {
 	provider, model, _ := req.GetRequestFields()
-	managedDone, admissionErr := bifrost.beginManaged(provider, req.RequestType)
+	managedDone, admissionErr := bifrost.beginManaged(ctx, provider, req.RequestType)
 	if admissionErr != nil {
 		return nil, admissionErr
 	}
@@ -6057,6 +6058,7 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 	// overwritten around RunPostLLMHooks — plugin modifications to these 4 fields are
 	// no-ops by design; proper request metadata is preserved and tampering is discouraged.
 	preReq, shortCircuit, preCount := pipeline.RunLLMPreHooks(ctx, req)
+	shortCircuit = bifrost.guardManagedShortcut(ctx, preReq, shortCircuit, managedDone != nil)
 	bifrost.endCoreSpan(prePipeSpan)
 	if shortCircuit == nil && preReq != nil {
 		shortCircuit = bifrost.managedBoundary(ctx, preReq, &managedDone, provider)

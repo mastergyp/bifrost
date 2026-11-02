@@ -329,6 +329,21 @@ type ManagedInference interface {
 	Close()
 }
 
+// ContextManagedInference pins trusted ingress provenance independently of a
+// parser/plugin's provider selection. Required requests cannot escape through
+// an unowned provider and are tracked through shutdown like other managed work.
+type ContextManagedInference interface {
+	ManagedInference
+	RequiresManaged(ctx *BifrostContext) bool
+}
+
+// ManagedShortcutPolicy validates successful pre-hook/cache results without
+// dispatching inference. Unqualified replies must not bypass original-caller
+// or actual-target policy; ordinary pre-hook denials retain their original error.
+type ManagedShortcutPolicy interface {
+	ValidateShortcut(ctx *BifrostContext, request *BifrostRequest, result *LLMPluginShortCircuit) *BifrostError
+}
+
 type LLMPlugin interface {
 	BasePlugin
 

@@ -16,14 +16,37 @@ func managedNoFallback(err *schemas.BifrostError) *schemas.BifrostError {
 
 // Register before pre-hooks or any queue lookup for an owned provider. The phase
 // lock covers Add so Shutdown's Wait cannot race a not-yet-registered callback.
-func (b *Bifrost) beginManaged(provider schemas.ModelProvider, typ schemas.RequestType) (func(), *schemas.BifrostError) {
+func (b *Bifrost) requiresManaged(ctx *schemas.BifrostContext) bool {
+	guard, ok := b.managedInference.(schemas.ContextManagedInference)
+	return ok && guard.RequiresManaged(ctx)
+}
+
+func (b *Bifrost) guardManagedShortcut(ctx *schemas.BifrostContext, req *schemas.BifrostRequest, result *schemas.LLMPluginShortCircuit, registered bool) *schemas.LLMPluginShortCircuit {
+	if result == nil || result.Error != nil || !(registered || b.requiresManaged(ctx)) {
+		return result
+	}
+	policy, ok := b.managedInference.(schemas.ManagedShortcutPolicy)
+	if !ok {
+		return result
+	}
+	if err := policy.ValidateShortcut(ctx, req, result); err != nil {
+		// Cache streams already produced in memory must not block their producer.
+		// This does not certify or release any physical engine work. Managed
+		// profiles cannot permit pre-hooks that independently execute models.
+		drainAbandonedStream(result.Stream)
+		return &schemas.LLMPluginShortCircuit{Error: managedNoFallback(err)}
+	}
+	return result
+}
+
+func (b *Bifrost) beginManaged(ctx *schemas.BifrostContext, provider schemas.ModelProvider, typ schemas.RequestType) (func(), *schemas.BifrostError) {
 	if b.managedInference == nil {
 		return nil, nil
 	}
 	if b.ctx.Err() != nil {
 		return nil, managedFailure()
 	}
-	if typ == schemas.ListModelsRequest || !b.managedInference.Owns(provider) {
+	if typ == schemas.ListModelsRequest || !(b.managedInference.Owns(provider) || b.requiresManaged(ctx)) {
 		return nil, nil
 	}
 	b.managedMu.RLock()
@@ -39,7 +62,7 @@ func (b *Bifrost) managedBoundary(ctx *schemas.BifrostContext, req *schemas.Bifr
 		return nil
 	}
 	provider, _, _ := req.GetRequestFields()
-	owned := b.managedInference.Owns(provider)
+	owned := b.managedInference.Owns(provider) || b.requiresManaged(ctx)
 	// An owned route cannot escape to an unregistered provider in a later hook.
 	if b.managedInference.Owns(original) && !owned {
 		return &schemas.LLMPluginShortCircuit{Error: managedFailure()}
@@ -48,7 +71,7 @@ func (b *Bifrost) managedBoundary(ctx *schemas.BifrostContext, req *schemas.Bifr
 		return nil
 	}
 	if *held == nil {
-		done, err := b.beginManaged(provider, req.RequestType)
+		done, err := b.beginManaged(ctx, provider, req.RequestType)
 		if err != nil {
 			return &schemas.LLMPluginShortCircuit{Error: err}
 		}

@@ -3,8 +3,17 @@
 package managedadmission
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
 	"math"
+	"net"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fasthttp/router"
+	"github.com/google/uuid"
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/admission"
@@ -21,6 +32,10 @@ import (
 	"github.com/maximhq/bifrost/framework/modelcatalog"
 	"github.com/maximhq/bifrost/framework/modelcatalog/datasheet"
 	"github.com/maximhq/bifrost/plugins/governance"
+	"github.com/maximhq/bifrost/transports/bifrost-http/integrations"
+	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	httpserver "github.com/maximhq/bifrost/transports/bifrost-http/server"
+	"github.com/valyala/fasthttp"
 )
 
 const model = "gpt-4o" // committed pricing fixture, not a real inference target
@@ -58,6 +73,9 @@ func (m *managed) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest)
 	m.calls.Add(1)
 	targets := []admission.ModelTarget{{Pool: "home", Provider: schemas.OpenAI, Model: model}, {Pool: "foreign", Provider: schemas.Anthropic, Model: "not-granted"}}
 	auth, err := m.authorizer.Authorize(ctx, targets[0], targets)
+	if principal := admission.AdmittedPrincipal(ctx); principal != nil {
+		auth, err = principal.Authorization(), nil
+	}
 	if err != nil {
 		return &schemas.LLMPluginShortCircuit{Error: &schemas.BifrostError{StatusCode: new(403), Error: &schemas.ErrorField{Message: "original caller authorization required"}}}
 	}
@@ -106,9 +124,10 @@ type fixture struct {
 	catalog *modelcatalog.ModelCatalog
 	managed *managed
 	account *account
+	runtime *admission.Runtime
 }
 
-func newFixture(t *testing.T, delegated bool) *fixture {
+func newFixture(t *testing.T, delegated bool, withRuntime ...bool) *fixture {
 	t.Helper()
 	logger := bifrost.NewNoOpLogger()
 	now := time.Now().UTC()
@@ -142,11 +161,25 @@ func newFixture(t *testing.T, delegated bool) *fixture {
 	}
 	manager := &managed{authorizer: authorizer, release: make(chan struct{})}
 	a := &account{}
-	client, err := bifrost.Init(context.Background(), schemas.BifrostConfig{Account: a, Logger: logger, LLMPlugins: []schemas.LLMPlugin{plugin}, ModelCatalog: catalog, ManagedInference: manager})
+	var boundary schemas.ManagedInference = manager
+	var runtime *admission.Runtime
+	if len(withRuntime) > 0 && withRuntime[0] {
+		native, _ := admission.NewNativeAuthorizer([]byte(strings.Repeat("s", 32)), nil)
+		verifier, e := admission.NewDelegationVerifier([]admission.DelegationKey{{ID: "owned-key-1", Secret: bytes.Repeat([]byte{11}, 32), GatewayVirtualKeyIDs: []string{vkID}}})
+		if e != nil {
+			t.Fatal(e)
+		}
+		runtime, e = admission.NewRuntime(manager, native, verifier, []admission.RuntimeModel{{Alias: "qwen", ModelTarget: admission.ModelTarget{Pool: "home", Provider: schemas.OpenAI, Model: model}}}, []string{vkID})
+		if e != nil {
+			t.Fatal(e)
+		}
+		boundary = runtime
+	}
+	client, err := bifrost.Init(context.Background(), schemas.BifrostConfig{Account: a, Logger: logger, LLMPlugins: []schemas.LLMPlugin{plugin}, ModelCatalog: catalog, ManagedInference: boundary})
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fixture{client, store, catalog, manager, a}
+	f := &fixture{client, store, catalog, manager, a, runtime}
 	t.Cleanup(func() { manager.finish(); client.Shutdown() })
 	return f
 }
@@ -272,5 +305,172 @@ func TestExhaustedOriginalBudgetCannotReachManagedInference(t *testing.T) {
 	data := f.store.GetGovernanceData(context.Background())
 	if data.Budgets["original-budget"].CurrentUsage != 2013.25 || data.RateLimits["original-rate"].TokenCurrentUsage != 37 || data.RateLimits["original-rate"].RequestCurrentUsage != 4 {
 		t.Fatal("refusal reset or charged original counters")
+	}
+}
+
+func ownedHTTP(t *testing.T, f *fixture) (string, *http.Client) {
+	t.Helper()
+	config := &lib.Config{ClientConfig: &configstore.ClientConfig{}, ModelCatalog: f.catalog}
+	r := router.New()
+	integrations.NewOpenAIRouter(f.client, config, nil, bifrost.NewNoOpLogger()).RegisterRoutes(r)
+	server := &httpserver.BifrostHTTPServer{Router: r, ManagedAdmission: f.runtime}
+	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true}
+	client := &http.Client{Transport: transport, Timeout: 5 * time.Second}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wire := &fasthttp.Server{Handler: server.ManagedRouterHandler()}
+	stopped := make(chan struct{})
+	go func() { defer close(stopped); _ = wire.Serve(listener) }()
+	t.Cleanup(func() {
+		f.managed.finish()
+		f.client.Shutdown()
+		_ = wire.Shutdown()
+		_ = listener.Close()
+		transport.CloseIdleConnections()
+		<-stopped
+	})
+	return "http://" + listener.Addr().String(), client
+}
+func ownedHTTPToken(api string, body []byte) string {
+	digest, _ := admission.RequestDigest(admission.API(api), body)
+	now := time.Now().UnixMilli()
+	var wire map[string]json.RawMessage
+	_ = json.Unmarshal(body, &wire)
+	controls := map[string]json.RawMessage{}
+	for _, name := range []string{"max_tokens", "max_output_tokens", "temperature", "reasoning_effort"} {
+		if value, ok := wire[name]; ok {
+			controls[name] = value
+		}
+	}
+	claims := map[string]any{"version": 1, "key_id": "owned-key-1", "root_id": uuid.NewString(), "call_id": uuid.NewString(), "subject_hash": strings.Repeat("a", 64), "session_hash": nil, "source_alias": "qwen", "allowed_aliases": []string{"qwen"}, "purpose": "main", "api": api, "body_hash": digest, "issued_at_ms": now, "expires_at_ms": now + 60000, "queue_deadline_ms": now + 45000, "weight": 1, "max_context_tokens": 32768, "max_output_tokens": 4096, "original_controls": controls}
+	raw, _ := json.Marshal(claims)
+	mac := hmac.New(sha256.New, bytes.Repeat([]byte{11}, 32))
+	mac.Write([]byte("sw-gateway-delegation-v1\x00"))
+	mac.Write(raw)
+	return "swgd1." + base64.RawURLEncoding.EncodeToString(raw) + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+func TestActualHTTPGatewayAndNativeRoutesKeepOriginalAccountingOnUnaryAndCancelledStreams(t *testing.T) {
+	for _, api := range []string{string(admission.Chat), string(admission.Responses)} {
+		for _, stream := range []bool{false, true} {
+			for _, gateway := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/stream=%t/gateway=%t", api, stream, gateway), func(t *testing.T) {
+					f := newFixture(t, false, true)
+					base, client := ownedHTTP(t, f)
+					payload := map[string]any{"model": "openai/" + model, "max_tokens": 16, "stream": stream}
+					if api == string(admission.Chat) {
+						payload["messages"] = []any{map[string]any{"role": "user", "content": "owned synthetic HTTP"}}
+					} else {
+						delete(payload, "max_tokens")
+						payload["max_output_tokens"] = 16
+						payload["input"] = "owned synthetic HTTP"
+					}
+					body, _ := json.Marshal(payload)
+					path := "/openai" + api
+					if gateway {
+						path = admission.GatewayPrefix + api
+					}
+					request, _ := http.NewRequest("POST", base+path, bytes.NewReader(body))
+					request.Header.Set("Content-Type", "application/json")
+					request.Header.Set("x-bf-vk", vkValue)
+					request.Header.Set("x-request-id", "owned-trace-not-billing-id")
+					if gateway {
+						request.Header.Set(admission.DelegationHeader, ownedHTTPToken(api, body))
+					}
+					response, err := client.Do(request)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if response.StatusCode != 200 {
+						raw, _ := io.ReadAll(response.Body)
+						response.Body.Close()
+						t.Fatalf("actual Bifrost HTTP status=%d body=%s", response.StatusCode, raw)
+					}
+					if stream {
+						first := make([]byte, 1)
+						if _, err = io.ReadFull(response.Body, first); err != nil {
+							t.Fatal(err)
+						}
+						response.Body.Close()
+						f.managed.finish()
+					} else {
+						raw, err := io.ReadAll(response.Body)
+						response.Body.Close()
+						if err != nil || !bytes.Contains(raw, []byte("synthetic-managed")) {
+							t.Fatalf("response lost: %v / %s", err, raw)
+						}
+					}
+					f.client.Shutdown()
+					data := f.store.GetGovernanceData(context.Background())
+					rate := data.RateLimits["original-rate"]
+					f.managed.mu.Lock()
+					auth := f.managed.authorization
+					f.managed.mu.Unlock()
+					// HTTP converters may still populate defaults on their own response.
+					// Expected pricing must not read that transport-owned object.
+					priced := &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{Model: model, Usage: &schemas.BifrostLLMUsage{PromptTokens: 5, CompletionTokens: 2, TotalTokens: 7}}}
+					priced.PopulateExtraFields(schemas.ChatCompletionRequest, schemas.OpenAI, model, model)
+					cost := f.catalog.CalculateCost(priced, nil)
+					if rate.TokenCurrentUsage != 44 || rate.RequestCurrentUsage != 5 || cost <= 0 || math.Abs(data.Budgets["original-budget"].CurrentUsage-(13.25+cost)) > 1e-10 {
+						t.Fatalf("real HTTP original accounting changed: tokens=%d requests=%d budget=%g", rate.TokenCurrentUsage, rate.RequestCurrentUsage, data.Budgets["original-budget"].CurrentUsage)
+					}
+					if len(auth.Pools) != 1 || auth.Pools[0] != "home" || auth.OriginalLimits == nil || f.managed.calls.Load() != 1 || f.account.keys.Load() != 0 {
+						t.Fatal("real HTTP scope/owner or managed once boundary changed")
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestActualHTTPGatewayDenialsDoNotSpendOrReachManagedProducer(t *testing.T) {
+	for _, kind := range []string{"missing-proof", "altered-body", "native-channel", "source-mismatch", "unknown-key", "disabled-runtime"} {
+		t.Run(kind, func(t *testing.T) {
+			f := newFixture(t, false, true)
+			if kind == "disabled-runtime" {
+				f.runtime = nil
+			}
+			base, client := ownedHTTP(t, f)
+			body := []byte(`{"model":"openai/gpt-4o","messages":[{"role":"user","content":"owned"}],"max_tokens":1}`)
+			if kind == "source-mismatch" {
+				body = []byte(`{"model":"openai/not-granted","messages":[]}`)
+			}
+			token := ownedHTTPToken(string(admission.Chat), body)
+			if kind == "altered-body" {
+				body = append(body, ' ')
+			}
+			path := admission.GatewayPrefix + string(admission.Chat)
+			if kind == "native-channel" {
+				path = "/openai" + string(admission.Chat)
+			}
+			request, _ := http.NewRequest("POST", base+path, bytes.NewReader(body))
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("x-bf-vk", vkValue)
+			if kind == "unknown-key" {
+				request.Header.Set("x-bf-vk", "owned-invalid-credential")
+			}
+			if kind != "missing-proof" {
+				request.Header.Set(admission.DelegationHeader, token)
+			}
+			response, err := client.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, _ := io.ReadAll(io.LimitReader(response.Body, 65536))
+			response.Body.Close()
+			want := 401
+			if kind == "source-mismatch" {
+				want = 403
+			}
+			if response.StatusCode != want {
+				t.Fatalf("denial status=%d want=%d body=%s", response.StatusCode, want, raw)
+			}
+			f.client.Shutdown()
+			f.assertUntouched(t)
+			if f.managed.calls.Load() != 0 {
+				t.Fatal("denied HTTP request reached managed producer")
+			}
+		})
 	}
 }

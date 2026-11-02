@@ -23,6 +23,7 @@ import (
 
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/grant"
+	"github.com/valyala/fasthttp"
 )
 
 func fixtureRequest() Request {
@@ -832,4 +833,261 @@ func TestOwnedRustGatewayDelegationProtocol(t *testing.T) {
 	if !schemas.IsSensitiveHeader(DelegationHeader) {
 		t.Fatal("delegation token would leak through trace headers")
 	}
+}
+
+type runtimeProbe struct {
+	calls     int
+	principal *Principal
+}
+
+func (*runtimeProbe) Owns(p schemas.ModelProvider) bool {
+	return p == "gpu0" || p == "gpu1" || p == "gpu2"
+}
+func (p *runtimeProbe) Close() {}
+func (p *runtimeProbe) Handle(ctx *schemas.BifrostContext, _ *schemas.BifrostRequest) *schemas.LLMPluginShortCircuit {
+	p.calls++
+	p.principal = AdmittedPrincipal(ctx)
+	return &schemas.LLMPluginShortCircuit{Response: &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{ID: "owned"}}}
+}
+func runtimeFixture(t *testing.T) (*Runtime, *runtimeProbe) {
+	t.Helper()
+	verifier, _, _, _ := delegationFixture(t)
+	authorizer, _ := NewNativeAuthorizer([]byte(strings.Repeat("s", 32)), nil)
+	probe := &runtimeProbe{}
+	targets := nativeTargets()
+	runtime, err := NewRuntime(probe, authorizer, verifier, []RuntimeModel{{"qwen", targets[0]}, {"glm", targets[1]}, {"ds", targets[2]}}, []string{"owned-gateway-transit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return runtime, probe
+}
+func runtimeToken(t *testing.T, api API, body []byte) string {
+	_, c, _, _ := delegationFixture(t)
+	n := uint64(time.Now().UnixMilli())
+	c.IssuedAtMS = n
+	c.ExpiresAtMS = n + 60000
+	c.QueueDeadlineMS = n + 45000
+	c.API = string(api)
+	c.BodyHash, _ = RequestDigest(api, body)
+	return delegationFixtureToken(t, c, nil)
+}
+func TestGatewayRuntimeHTTPRejectsMissingAlteredOrMisroutedProofBeforeDispatch(t *testing.T) {
+	body := []byte(`{"model":"gpu0/qwen","messages":[]}`)
+	for _, tc := range []struct {
+		name, method, path         string
+		api                        API
+		body                       []byte
+		token, duplicate, override bool
+		status                     int
+	}{
+		{"chat missing", "POST", GatewayPrefix + string(Chat), Chat, body, false, false, false, 401},
+		{"responses missing", "POST", GatewayPrefix + string(Responses), Responses, body, false, false, false, 401},
+		{"altered body", "POST", GatewayPrefix + string(Chat), Chat, []byte(`{}`), true, false, false, 401},
+		{"wrong API", "POST", GatewayPrefix + string(Responses), Chat, body, true, false, false, 401},
+		{"duplicate", "POST", GatewayPrefix + string(Chat), Chat, body, true, true, false, 401},
+		{"native channel", "POST", "/openai" + string(Chat), Chat, body, true, false, false, 401},
+		{"method", "GET", GatewayPrefix + string(Chat), Chat, body, true, false, false, 405},
+		{"unknown", "POST", GatewayPrefix + "/other", Chat, body, true, false, false, 404},
+		{"routing override", "POST", GatewayPrefix + string(Chat), Chat, body, true, false, true, 400},
+		{"query override", "POST", GatewayPrefix + string(Chat) + "?model=other", Chat, body, true, false, false, 400},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runtime, probe := runtimeFixture(t)
+			ctx := &fasthttp.RequestCtx{}
+			ctx.Request.SetRequestURI(tc.path)
+			ctx.Request.Header.SetMethod(tc.method)
+			ctx.Request.SetBody(tc.body)
+			if tc.token {
+				token := runtimeToken(t, tc.api, body)
+				ctx.Request.Header.Set(DelegationHeader, token)
+				if tc.duplicate {
+					ctx.Request.Header.Add(DelegationHeader, token)
+				}
+			}
+			if tc.override {
+				ctx.Request.Header.Set("x-bf-compat", "true")
+			}
+			next := 0
+			runtime.WrapHTTP(func(*fasthttp.RequestCtx) { next++ })(ctx)
+			if ctx.Response.StatusCode() != tc.status || next != 0 || probe.calls != 0 {
+				t.Fatalf("guard status=%d next=%d managed=%d", ctx.Response.StatusCode(), next, probe.calls)
+			}
+		})
+	}
+}
+func TestGatewayRuntimePreservesOriginalGrantAndSharedLegacyHomeAccess(t *testing.T) {
+	for _, gateway := range []bool{false, true} {
+		t.Run(fmt.Sprint(gateway), func(t *testing.T) {
+			runtime, probe := runtimeFixture(t)
+			ctx := &fasthttp.RequestCtx{}
+			path := "/openai" + string(Chat)
+			body := []byte(`{"model":"gpu0/qwen"}`)
+			if gateway {
+				path = GatewayPrefix + string(Chat)
+				ctx.Request.Header.Set(DelegationHeader, runtimeToken(t, Chat, body))
+			}
+			ctx.Request.SetRequestURI(path)
+			ctx.Request.Header.SetMethod("POST")
+			ctx.Request.SetBody(body)
+			ctx.Request.Header.Set("x-session-id", "explicit-owned-session")
+			runtime.WrapHTTP(func(httpCtx *fasthttp.RequestCtx) {
+				bf := nativeGrantContext("owned-gateway-transit", "service", nativePermits(true))
+				before := bf.Grant().Limits()
+				httpCtx.VisitUserValuesAll(func(k, v any) { bf.SetValue(k, v) })
+				if runtime.RequiresManaged(bf) != gateway {
+					t.Fatal("trusted ingress provenance lost")
+				}
+				result := runtime.Handle(bf, &schemas.BifrostRequest{RequestType: schemas.ChatCompletionRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: "gpu0", Model: "qwen"}})
+				if result.Error != nil || probe.calls != 1 || probe.principal == nil {
+					t.Fatal("authorized source failed")
+				}
+				principal := probe.principal
+				auth := principal.Authorization()
+				if !reflect.DeepEqual(auth.Pools, []string{"qwen"}) || auth.OriginalLimits != before || bf.Grant().Limits() != before {
+					t.Fatal("scope, shared home access or original limits changed")
+				}
+				if gateway {
+					if principal.Delegation() == nil || principal.SessionHash() != nil {
+						t.Fatal("unsigned session replaced signed absent session")
+					}
+				} else if principal.SessionHash() == nil {
+					t.Fatal("explicit native conversation lost")
+				}
+				auth.Pools[0] = "tampered"
+				if principal.Authorization().Pools[0] != "qwen" {
+					t.Fatal("principal scope is mutable")
+				}
+			})(ctx)
+			if probe.calls != 1 {
+				t.Fatal("native or delegated access dropped")
+			}
+			if string(ctx.Path()) != path {
+				t.Fatal("transport path was not restored")
+			}
+		})
+	}
+}
+func TestGatewayRuntimeRequiresSignedSourceAndResolvedTrustedVK(t *testing.T) {
+	for _, tc := range []struct {
+		vk       string
+		provider schemas.ModelProvider
+		model    string
+	}{
+		{"employee-key", "gpu0", "qwen"}, {"owned-gateway-transit", "gpu1", "ds"},
+	} {
+		runtime, probe := runtimeFixture(t)
+		httpCtx := &fasthttp.RequestCtx{}
+		body := []byte(`{"model":"gpu0/qwen"}`)
+		httpCtx.Request.SetRequestURI(GatewayPrefix + string(Chat))
+		httpCtx.Request.Header.SetMethod("POST")
+		httpCtx.Request.SetBody(body)
+		httpCtx.Request.Header.Set(DelegationHeader, runtimeToken(t, Chat, body))
+		runtime.WrapHTTP(func(c *fasthttp.RequestCtx) {
+			bf := nativeGrantContext(tc.vk, "service", nativePermits(true))
+			c.VisitUserValuesAll(func(k, v any) { bf.SetValue(k, v) })
+			result := runtime.Handle(bf, &schemas.BifrostRequest{RequestType: schemas.ChatCompletionRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: tc.provider, Model: tc.model}})
+			if result.Error == nil || probe.calls != 0 {
+				t.Fatal("credential/source override reached inner producer")
+			}
+		})(httpCtx)
+	}
+	var disabled *Runtime
+	next := 0
+	c := &fasthttp.RequestCtx{}
+	c.Request.SetRequestURI("/openai/v1/models")
+	disabled.WrapHTTP(func(*fasthttp.RequestCtx) { next++ })(c)
+	if next != 1 {
+		t.Fatal("disabled feature changed normal endpoints")
+	}
+	c.Request.SetRequestURI(GatewayPrefix + string(Chat))
+	c.Request.Header.SetMethod("POST")
+	disabled.WrapHTTP(func(*fasthttp.RequestCtx) { next++ })(c)
+	if c.Response.StatusCode() != 401 || next != 1 {
+		t.Fatal("disabled channel escaped")
+	}
+}
+
+func TestManagedRuntimeRejectsAmbiguousDeploymentInputsAndRedactsPrivateHandles(t *testing.T) {
+	r, p := runtimeFixture(t)
+	for _, models := range [][]RuntimeModel{nil, append(append([]RuntimeModel(nil), r.models...), r.models[0]), {{Alias: "bad/alias", ModelTarget: nativeTargets()[0]}}, {{Alias: "other", ModelTarget: ModelTarget{Pool: "qwen", Provider: "unowned", Model: "qwen"}}}} {
+		if _, err := NewRuntime(p, r.native, r.verifier, models, nil); err == nil {
+			t.Fatal("ambiguous/unowned registry accepted")
+		}
+	}
+	if _, err := NewRuntime(nil, r.native, r.verifier, r.models, nil); err == nil {
+		t.Fatal("missing producer accepted")
+	}
+	if _, err := NewRuntime(p, r.native, r.verifier, r.models, []string{"duplicate", "duplicate"}); err == nil {
+		t.Fatal("duplicate legacy identity accepted")
+	}
+	reused, _ := NewNativeAuthorizer(bytes.Repeat([]byte{11}, 32), nil)
+	if _, err := NewRuntime(p, reused, r.verifier, r.models, nil); err == nil {
+		t.Fatal("persistent native subject secret reused as rotating signing key")
+	}
+	for _, value := range []any{r, r.native, r.verifier, &Principal{}} {
+		for _, debug := range []string{fmt.Sprint(value), fmt.Sprintf("%#v", value)} {
+			if !strings.Contains(debug, "redacted") || strings.Contains(debug, "owned-gateway-transit") || strings.Contains(debug, strings.Repeat("s", 32)) {
+				t.Fatal("private runtime debug was not redacted")
+			}
+		}
+	}
+}
+
+func TestRuntimeAliasesShareOneAuthorizedPoolWithoutLosingSignedSource(t *testing.T) {
+	base, probe := runtimeFixture(t)
+	models := append(append([]RuntimeModel(nil), base.models...), RuntimeModel{Alias: "qwen-alt", ModelTarget: nativeTargets()[0]})
+	runtime, err := NewRuntime(probe, base.native, base.verifier, models, []string{"owned-gateway-transit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, alias := range []string{"qwen", "qwen-alt"} {
+		_, c, _, _ := delegationFixture(t)
+		body := []byte(`{"model":"gpu0/qwen"}`)
+		n := uint64(time.Now().UnixMilli())
+		c.SourceAlias = alias
+		c.AllowedAliases = []string{alias}
+		c.BodyHash, _ = RequestDigest(Chat, body)
+		c.IssuedAtMS = n
+		c.ExpiresAtMS = n + 60000
+		c.QueueDeadlineMS = n + 45000
+		ctx := &fasthttp.RequestCtx{}
+		ctx.Request.SetRequestURI(GatewayPrefix + string(Chat))
+		ctx.Request.Header.SetMethod("POST")
+		ctx.Request.SetBody(body)
+		ctx.Request.Header.Set(DelegationHeader, delegationFixtureToken(t, c, nil))
+		before := probe.calls
+		runtime.WrapHTTP(func(h *fasthttp.RequestCtx) {
+			bf := nativeGrantContext("owned-gateway-transit", "service", nativePermits(true))
+			h.VisitUserValuesAll(func(k, v any) { bf.SetValue(k, v) })
+			result := runtime.Handle(bf, &schemas.BifrostRequest{RequestType: schemas.ChatCompletionRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: "gpu0", Model: "qwen"}})
+			if result.Error != nil || !reflect.DeepEqual(probe.principal.Authorization().Pools, []string{"qwen"}) {
+				t.Fatal("same-pool alias lost signed source or acquired extra capacity authority")
+			}
+		})(ctx)
+		if probe.calls != before+1 {
+			t.Fatal("alias failed to reach authorized producer")
+		}
+	}
+	bad := append(append([]RuntimeModel(nil), models...), RuntimeModel{Alias: "duplicate-authority", ModelTarget: ModelTarget{Pool: "other-pool", Provider: "gpu0", Model: "qwen"}})
+	if _, err := NewRuntime(probe, base.native, base.verifier, bad, nil); err == nil {
+		t.Fatal("one wire model acquired two pool authorities")
+	}
+}
+
+func TestGatewayRuntimeRetainsOriginalQueueDeadlineWithoutDispatch(t *testing.T) {
+	runtime, probe := runtimeFixture(t)
+	ctx := &fasthttp.RequestCtx{}
+	body := []byte(`{"model":"gpu0/qwen"}`)
+	ctx.Request.SetRequestURI(GatewayPrefix + string(Chat))
+	ctx.Request.Header.SetMethod("POST")
+	ctx.Request.SetBody(body)
+	ctx.Request.Header.Set(DelegationHeader, runtimeToken(t, Chat, body))
+	runtime.WrapHTTP(func(h *fasthttp.RequestCtx) {
+		bf := nativeGrantContext("owned-gateway-transit", "service", nativePermits(true))
+		h.VisitUserValuesAll(func(k, v any) { bf.SetValue(k, v) })
+		result := runtime.handleAt(bf, &schemas.BifrostRequest{RequestType: schemas.ChatCompletionRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: "gpu0", Model: "qwen"}}, time.Now().Add(2*time.Minute))
+		if result.Error == nil || result.Error.StatusCode == nil || *result.Error.StatusCode != 408 || probe.calls != 0 || result.Error.AllowFallbacks == nil || *result.Error.AllowFallbacks {
+			t.Fatal("queued proof gained a fresh deadline, dispatch or misleading authentication status")
+		}
+	})(ctx)
 }
