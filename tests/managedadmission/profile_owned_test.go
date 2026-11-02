@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -194,7 +195,47 @@ func TestOwnedConfiguredProfileHTTPServerForGateway(t *testing.T) {
 	f := ownedConfiguredProfileFixture(t)
 	var mu sync.Mutex
 	var claims []map[string]any
+	var readyMode atomic.Int32
 	base, _ := ownedHTTP(t, f, func(ctx *fasthttp.RequestCtx) {
+		// Owned-only control surface; never linked into the application.
+		if strings.HasPrefix(string(ctx.Path()), "/owned-ready/") {
+			modes := map[string]int32{"ready": 0, "unavailable": 1, "namespace": 2, "contract": 3, "protocol": 4, "oversized": 5, "slow": 6, "malformed": 7}
+			mode, ok := modes[strings.TrimPrefix(string(ctx.Path()), "/owned-ready/")]
+			if !ok {
+				ctx.SetStatusCode(400)
+				return
+			}
+			readyMode.Store(mode)
+			ctx.SetStatusCode(204)
+			ctx.SetBody(nil)
+			return
+		}
+		if string(ctx.Path()) == admission.GatewayPrefix+"/health" {
+			switch readyMode.Load() {
+			case 1:
+				ctx.SetStatusCode(503)
+			case 2, 3, 4:
+				var body map[string]any
+				_ = json.Unmarshal(ctx.Response.Body(), &body)
+				switch readyMode.Load() {
+				case 2:
+					body["namespace"] = "other"
+				case 3:
+					body["contract_sha256"] = strings.Repeat("b", 64)
+				case 4:
+					body["protocol"] = 2
+				}
+				raw, _ := json.Marshal(body)
+				ctx.SetBody(raw)
+			case 5:
+				ctx.SetBodyString(strings.Repeat("x", 4097))
+			case 6:
+				time.Sleep(1100 * time.Millisecond)
+			case 7:
+				ctx.SetBodyString("{invalid")
+			}
+			return
+		}
 		raw := string(ctx.Request.Header.Peek(admission.DelegationHeader))
 		parts := strings.Split(raw, ".")
 		if len(parts) != 3 {

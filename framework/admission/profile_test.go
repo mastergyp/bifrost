@@ -15,6 +15,7 @@ import (
 
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/valyala/fasthttp"
 )
 
 const profileNamespace = "d5f6d5c9-a5fb-4bd1-9a0d-7fd4af925480"
@@ -253,5 +254,56 @@ func TestManagedPreparationRefusesExpandedMalformedAndUnavailablePlans(t *testin
 				t.Fatal("service failure was mislabeled caller error")
 			}
 		})
+	}
+}
+
+// Only the startup-loaded physical profile can attest readiness. Static
+// authorizers and an unconfigured or closed runtime must never certify it.
+func TestManagedProfileHTTPReadinessIsLoadedAuthorityOnly(t *testing.T) {
+	socket := profileSocket(t, func(http.ResponseWriter, *http.Request) { t.Error("readiness must not run preparation") }, 1)
+	runtime, err := LoadProfile(context.Background(), writeProfile(t, profileConfig(socket)), profileSecrets, profileFunding, bifrost.NewNoOpLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	cases := []struct {
+		name, method, path string
+		runtime            *Runtime
+		want               int
+	}{
+		{"unconfigured", "GET", GatewayPrefix + "/health", nil, 503},
+		{"prototype", "GET", GatewayPrefix + "/health", &Runtime{}, 503},
+		{"loaded", "GET", GatewayPrefix + "/health", runtime, 200},
+		{"method", "POST", GatewayPrefix + "/health", runtime, 405},
+		{"query", "GET", GatewayPrefix + "/health?key=ignored", runtime, 400},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &fasthttp.RequestCtx{}
+			ctx.Request.SetRequestURI(tc.path)
+			ctx.Request.Header.SetMethod(tc.method)
+			next := false
+			tc.runtime.WrapHTTP(func(*fasthttp.RequestCtx) { next = true })(ctx)
+			if next || ctx.Response.StatusCode() != tc.want {
+				t.Fatalf("readiness=%d next=%v body=%s", ctx.Response.StatusCode(), next, ctx.Response.Body())
+			}
+			if tc.want == 200 {
+				var body map[string]any
+				if json.Unmarshal(ctx.Response.Body(), &body) != nil || body["protocol"] != float64(1) || body["state"] != "ready" || body["namespace"] != profileNamespace || body["contract_sha256"] != strings.Repeat("a", 64) || len(body) != 4 {
+					t.Fatalf("wrong loaded authority: %s", ctx.Response.Body())
+				}
+				if string(ctx.Response.Header.Peek("Cache-Control")) != "no-store" {
+					t.Fatal("readiness must not be cached")
+				}
+			}
+		})
+	}
+	runtime.Close()
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.SetRequestURI(GatewayPrefix + "/health")
+	ctx.Request.Header.SetMethod("GET")
+	runtime.WrapHTTP(func(*fasthttp.RequestCtx) { t.Fatal("closed runtime routed") })(ctx)
+	if ctx.Response.StatusCode() != 503 {
+		t.Fatalf("closed runtime reports %d", ctx.Response.StatusCode())
 	}
 }

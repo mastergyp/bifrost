@@ -133,6 +133,7 @@ func AdmittedPrincipal(ctx *schemas.BifrostContext) *Principal {
 // The inner producer must enforce physical capacity, target contracts and usage;
 // this wrapper alone is not release qualification for those responsibilities.
 type Runtime struct {
+	closed     atomic.Bool
 	rejections *Client
 	inner      schemas.ManagedInference
 	native     *NativeAuthorizer
@@ -330,7 +331,7 @@ func (r *Runtime) ValidateShortcut(*schemas.BifrostContext, *schemas.BifrostRequ
 	return &schemas.BifrostError{StatusCode: new(503), IsBifrostError: true, AllowFallbacks: new(false), Error: &schemas.ErrorField{Message: "managed cached result is not qualified"}}
 }
 func (r *Runtime) Close() {
-	if r != nil && r.inner != nil {
+	if r != nil && r.inner != nil && r.closed.CompareAndSwap(false, true) {
 		r.inner.Close()
 	}
 }
@@ -454,6 +455,34 @@ func gatewayHTTPError(ctx *fasthttp.RequestCtx, status int, code string) {
 func (r *Runtime) WrapHTTP(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		path := string(ctx.Path())
+		if path == GatewayPrefix+"/health" {
+			ctx.Response.Header.Set("Cache-Control", "no-store")
+			if !ctx.IsGet() {
+				ctx.Response.Header.Set("Allow", "GET")
+				gatewayHTTPError(ctx, 405, "GATEWAY_GET_REQUIRED")
+				return
+			}
+			if len(ctx.URI().QueryString()) != 0 || len(ctx.Request.Body()) != 0 {
+				gatewayHTTPError(ctx, 400, "GATEWAY_HEALTH_INVALID")
+				return
+			}
+			// This is startup-loaded authority attestation, not an inference or
+			// controller transaction. Gateway checks its own local controller.
+			if r == nil || r.closed.Load() || r.rejections == nil || r.rejections.authority == nil {
+				gatewayHTTPError(ctx, 503, "GATEWAY_NOT_READY")
+				return
+			}
+			body, _ := json.Marshal(struct {
+				Protocol  int    `json:"protocol"`
+				State     string `json:"state"`
+				Namespace string `json:"namespace"`
+				Contract  string `json:"contract_sha256"`
+			}{1, "ready", r.rejections.authority.namespace, r.rejections.authority.contract})
+			ctx.SetStatusCode(200)
+			ctx.SetContentType("application/json")
+			ctx.SetBody(body)
+			return
+		}
 		gateway := path == GatewayPrefix || strings.HasPrefix(path, GatewayPrefix+"/")
 		values := ctx.Request.Header.PeekAll(DelegationHeader)
 		if !gateway {

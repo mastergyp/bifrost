@@ -176842,6 +176842,35 @@
           ]
         }
       ]
+    },
+    {
+      "name": "130. Managed readiness before quota (fork PR #1)",
+      "description": "Unconfigured standalone transport must not claim the managed physical profile is ready. No provider or billable model call.",
+      "item": [
+        {
+          "name": "openai managed-readiness unconfigured service is unavailable - fork PR #1",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/sw/gateway/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Unconfigured managed profile cannot certify readiness', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.eql(503);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('GATEWAY_NOT_READY');",
+                  "  pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }
