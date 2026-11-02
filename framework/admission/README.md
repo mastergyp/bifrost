@@ -2,7 +2,7 @@
 
 Candidate client, authorization library and nullable HTTP runtime. The factory can
 compose that runtime, while the standalone CLI installs none and a qualified
-physical producer is still pending. No production configuration, Key or Grant was
+production-qualified physical producer is still pending. No production configuration, Key or Grant was
 changed. Prepared tickets can forward exact bytes to the local Rust sender in
 owned fixtures. The existing Gateway quota ledger and Bifrost governance remain
 the respective financial owners.
@@ -311,3 +311,67 @@ ordinary opt-in ignores, explicit capacity100/fault/upgrade-TTL cases, actual
 Go/Rust control and mock dispatch, and the separate two-row original ledger
 proof. See the [summary](evidence/absolute-queue-deadline-20261102.json) and
 [owned receipt](evidence/absolute-queue-owned-20261102.json).
+
+
+## Concrete Unix producer and canonical HTTP proof
+
+`Producer` now reuses the existing OpenAI Chat/Responses converters, request
+serializer, file-URL resolver and SSE decoders. It freezes the actual bytes,
+restores original explicit controls after source conversion, and asks a required
+preparation policy to inspect a read-only `FrozenInput`. The policy cannot expand
+the principal's model pools; the controller still intersects its approved graph.
+Signed Gateway CallID/deadline/weight are retained. Native HTTP captures controls
+and deadline before hooks; SDK-only composition starts at its managed boundary.
+Input debug formatting is redacted and no body is copied into shared context.
+
+The signer acquires before actual Unix I/O, then sends exact-body-bound owner
+headers to the fixed local sender. Accepted decoding uses a bounded independent
+context, retaining final usage after the downstream leaves. Existing decoders use
+a private opt-in final-chunk marker; core runs the original post-hooks once.
+Ordinary provider chunks and JSON are unchanged. Stream output closes only after
+its bounded cleanup and operation resources finish, so core shutdown joins them.
+The producer does not select a second provider key or run a second governance
+pipeline. A planning error, wider pool or reused signed call cannot start native
+fallback. Planning is subject to the original deadline and must not independently
+execute models; common image processing belongs before holding physical slots.
+
+Rust `start_enforced` is an explicit application composition for a **qualified**
+managed ingress profile with a real matching dispatcher. Default `start` and
+`start_with_sender` continue reporting `not_enabled`; the CLI installs none.
+The test invokes `start_enforced` only in its owned namespace. Do not infer that
+production's other entrances or policies became qualified from that test.
+
+Fixed Gateway `012134bdc1d2d6492c1894bfdbe43a869d18a4f7` and Bifrost
+`05b40f4b5c6c28d5c74e6d61a5138ad171568666` now prove **one request** through
+canonical Bifrost HTTP -> original Grant/governance -> concrete producer -> real
+Unix controller/dispatcher -> synthetic engine. Eight native/signed Gateway x
+Chat/Responses x unary/cancelled SSE shapes preserve nonzero original money,
+token and request counters once, with no provider-key selection. They finish
+physical work, reach active0 and remove the owned schema. The combined helper
+also runs original121 PG/Redis regressions (6 ordinary opt-in ignores), capacity100,
+all4 explicit Go probes and independent actual Rust Gateway HTTP/verifier2-row
+proof, and removes both containers. That last Gateway request is still separate
+from the Bifrost/physical request; a single request across both frontends remains
+unqualified. [Summary](evidence/concrete-producer-20261102.json),
+[owned receipt](evidence/concrete-producer-owned-20261102.json).
+
+Final local race:56 admission events/3 ordinary skips,38 SDK/HTTP events/1
+ordinary owned-profile skip, targeted marker/dialer2 and vet pass. The public-IP
+error test now injects a real dial failure rather than assuming TEST-NET cannot
+be intercepted on the host. Full utilities are **not all green**:735 events pass,
+one native TCP cancellation-pool stress test fails. An overlay of the old
+utils.go also fails1 of3 repetitions, including EADDRNOTAVAIL under repeated
+cancellation load; the earlier EOF cause is not fully established. Preserve both
+logs and qualify the native pool under isolated Linux stress before claiming
+that recovery complete. This is not attributed to the managed producer merely
+because it was found during its checks.
+
+No standalone HTTP request can configure this embedded producer yet; its paid
+public-provider harness path remains unavailable, so this increment uses the
+owned canonical HTTP fixture. The earlier5 public provenance cases remain.
+Still needed before release: actual production registry/health/target finance/key
+policy and loader; native original logical-model binding around rewriting hooks;
+existing routing compatibility (do not silently disable it); combined real
+Gateway frontend; common images, cache receipts, abort/crash financial recovery,
+fixed Linux release and rollback. Do not substitute disabled existing features
+for the requested preserved behavior. Production remains unchanged.
