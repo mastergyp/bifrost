@@ -2,6 +2,8 @@ package bifrost
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -631,6 +633,216 @@ func TestShortCircuitStreamKeepsLatePostHooks(t *testing.T) {
 			}
 			if plugin.results.Load() != 3 || plugin.errors.Load() != 1 || plugin.tokens.Load() != 7 || plugin.metadataErrors.Load() != 0 {
 				t.Fatalf("late post-hooks lost/duplicated: results=%d errors=%d tokens=%d metadata_errors=%d", plugin.results.Load(), plugin.errors.Load(), plugin.tokens.Load(), plugin.metadataErrors.Load())
+			}
+		})
+	}
+}
+
+// A managed dispatcher is deliberately outside the ordered plugin list, so all
+// original pre/post governance hooks still run before/after its actual I/O.
+type managedProbe struct {
+	calls     atomic.Int64
+	closed    atomic.Bool
+	pre       *managedPreHooks
+	stream    chan *schemas.BifrostStreamChunk
+	empty     bool
+	result    *schemas.LLMPluginShortCircuit
+	sawAllPre atomic.Bool
+}
+
+func (m *managedProbe) Owns(provider schemas.ModelProvider) bool { return provider == schemas.OpenAI }
+func (m *managedProbe) Handle(_ *schemas.BifrostContext, req *schemas.BifrostRequest) *schemas.LLMPluginShortCircuit {
+	m.calls.Add(1)
+	if m.pre != nil {
+		m.sawAllPre.Store(m.pre.preCalls.Load() == 1)
+	}
+	if m.empty {
+		return nil
+	}
+	if m.result != nil {
+		return m.result
+	}
+	if req.RequestType == schemas.ChatCompletionStreamRequest {
+		return &schemas.LLMPluginShortCircuit{Stream: m.stream}
+	}
+	return &schemas.LLMPluginShortCircuit{Response: &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{ID: "managed", Usage: &schemas.BifrostLLMUsage{PromptTokens: 5, CompletionTokens: 2, TotalTokens: 7}}}}
+}
+func (m *managedProbe) Close() { m.closed.Store(true) }
+
+func TestManagedDispatchRunsAfterPreHooksBeforeAnyProviderRequest(t *testing.T) {
+	var direct atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		direct.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"direct","choices":[],"usage":{"total_tokens":99}}`))
+	}))
+	defer server.Close()
+	account := NewMockAccount()
+	account.AddProviderWithBaseURL(schemas.OpenAI, 1, 1, server.URL)
+	account.configs[schemas.OpenAI].NetworkConfig.MaxRetries = 0
+	account.SetKeysForProvider(schemas.OpenAI, []schemas.Key{{ID: "owned-test", Value: *schemas.NewSecretVar("test-only"), Models: schemas.WhiteList{"*"}, Weight: 100}})
+	probe := &managedProbe{}
+	hooks := &managedPreHooks{terminalHookCounter: terminalHookCounter{}}
+	probe.pre = hooks
+	client, err := Init(context.Background(), schemas.BifrostConfig{Account: account, Logger: NewNoOpLogger(), LLMPlugins: []schemas.LLMPlugin{hooks}, ManagedInference: probe})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(client.Shutdown)
+	ctx := schemas.NewBifrostContext(context.Background(), time.Now().Add(3*time.Second))
+	resp, bfErr := client.ChatCompletionRequest(ctx, &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "owned", Input: []schemas.ChatMessage{{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: new("synthetic")}}}})
+	if bfErr != nil || resp == nil {
+		t.Fatalf("managed completion: %+v", bfErr)
+	}
+	if probe.calls.Load() != 1 || direct.Load() != 0 || resp.ID != "managed" || !probe.sawAllPre.Load() {
+		t.Fatalf("dispatch bypass/order: managed=%d direct=%d id=%s saw_pre=%v", probe.calls.Load(), direct.Load(), resp.ID, probe.sawAllPre.Load())
+	}
+	if hooks.results.Load() != 1 {
+		t.Fatalf("original post-hook did not run once: %d", hooks.results.Load())
+	}
+}
+
+type managedPreHooks struct {
+	terminalHookCounter
+	preCalls atomic.Int64
+}
+
+func (p *managedPreHooks) PreLLMHook(_ *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	p.preCalls.Add(1)
+	return req, nil, nil
+}
+
+func TestManagedNilResultFailsClosedWithoutProviderOrNativeFallback(t *testing.T) {
+	account := NewMockAccount()
+	account.AddProvider(schemas.OpenAI, 1, 1)
+	probe := &managedProbe{empty: true}
+	hooks := &terminalHookCounter{}
+	client, err := Init(context.Background(), schemas.BifrostConfig{Account: account, Logger: NewNoOpLogger(), LLMPlugins: []schemas.LLMPlugin{hooks}, ManagedInference: probe})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(client.Shutdown)
+	ctx := schemas.NewBifrostContext(context.Background(), time.Now().Add(3*time.Second))
+	_, bfErr := client.ChatCompletionRequest(ctx, &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "owned", Input: []schemas.ChatMessage{{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: new("synthetic")}}}, Fallbacks: []schemas.Fallback{{Provider: schemas.OpenAI, Model: "fallback-must-not-run"}}})
+	if bfErr == nil || bfErr.AllowFallbacks == nil || *bfErr.AllowFallbacks || probe.calls.Load() != 1 || hooks.errors.Load() != 1 {
+		t.Fatalf("nil managed dispatch escaped: %+v calls=%d hooks=%d", bfErr, probe.calls.Load(), hooks.errors.Load())
+	}
+}
+
+type managedFinalHooks struct {
+	terminalHookCounter
+	entered     chan struct{}
+	release     chan struct{}
+	finalTokens atomic.Int64
+	finalCount  atomic.Int64
+	cleaned     atomic.Bool
+}
+
+func (p *managedFinalHooks) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostResponse, err *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
+	if IsFinalChunk(ctx) {
+		p.finalCount.Add(1)
+		if resp != nil && resp.ChatResponse != nil && resp.ChatResponse.Usage != nil {
+			p.finalTokens.Add(int64(resp.ChatResponse.Usage.TotalTokens))
+		}
+		close(p.entered)
+		<-p.release
+	}
+	return p.terminalHookCounter.PostLLMHook(ctx, resp, err)
+}
+func (p *managedFinalHooks) Cleanup() error { p.cleaned.Store(true); return nil }
+
+func TestManagedStreamCancelFinalUsageAndShutdownJoinOriginalPostHooks(t *testing.T) {
+	account := NewMockAccount()
+	account.AddProvider(schemas.OpenAI, 1, 1)
+	probe := &managedProbe{stream: make(chan *schemas.BifrostStreamChunk, 1)}
+	hooks := &managedFinalHooks{entered: make(chan struct{}), release: make(chan struct{})}
+	client, err := Init(context.Background(), schemas.BifrostConfig{Account: account, Logger: NewNoOpLogger(), LLMPlugins: []schemas.LLMPlugin{hooks}, ManagedInference: probe})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := schemas.NewBifrostContextWithCancel(context.Background())
+	var releaseOnce, streamOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(hooks.release) }) }
+	closeStream := func() { streamOnce.Do(func() { close(probe.stream) }) }
+	t.Cleanup(func() { release(); closeStream(); cancel(); client.Shutdown() })
+	probe.stream <- &schemas.BifrostStreamChunk{BifrostChatResponse: &schemas.BifrostChatResponse{ID: "first", Choices: []schemas.BifrostResponseChoice{{Index: 0, ChatStreamResponseChoice: &schemas.ChatStreamResponseChoice{Delta: &schemas.ChatStreamResponseChoiceDelta{Content: new("first")}}}}}}
+	output, bfErr := client.ChatCompletionStreamRequest(ctx, &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "owned", Input: []schemas.ChatMessage{{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: new("synthetic")}}}})
+	if bfErr != nil {
+		t.Fatalf("stream setup: %+v", bfErr)
+	}
+	select {
+	case <-output:
+	case <-time.After(3 * time.Second):
+		t.Fatal("first chunk stalled")
+	}
+	cancel()
+	stopped := make(chan struct{})
+	go func() { client.Shutdown(); close(stopped) }()
+	probe.stream <- &schemas.BifrostStreamChunk{FinalForAccounting: true, BifrostChatResponse: &schemas.BifrostChatResponse{ID: "final", Usage: &schemas.BifrostLLMUsage{PromptTokens: 5, CompletionTokens: 2, TotalTokens: 7}}}
+	closeStream()
+	select {
+	case <-hooks.entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("late final usage never reached original post-hook")
+	}
+	select {
+	case <-stopped:
+		t.Fatal("shutdown cleaned up before terminal post-hook finished")
+	default:
+	}
+	if hooks.cleaned.Load() || hooks.finalTokens.Load() != 7 || hooks.finalCount.Load() != 1 {
+		t.Fatal("lost/duplicated finality or premature cleanup")
+	}
+	release()
+	select {
+	case <-stopped:
+	case <-time.After(3 * time.Second):
+		t.Fatal("shutdown did not join finished post-hooks")
+	}
+	if !probe.closed.Load() || !hooks.cleaned.Load() {
+		t.Fatal("admission/plugin cleanup incomplete")
+	}
+	if probe.calls.Load() != 1 {
+		t.Fatal("stream replayed")
+	}
+}
+
+func TestManagedMismatchedResultCannotEscapeToProvider(t *testing.T) {
+	for _, mode := range []string{"stream-for-unary", "response-for-stream"} {
+		t.Run(mode, func(t *testing.T) {
+			var direct atomic.Int64
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				direct.Add(1)
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"id":"native-bypass","choices":[],"usage":{"total_tokens":99}}`))
+			}))
+			defer server.Close()
+			a := NewMockAccount()
+			a.AddProviderWithBaseURL(schemas.OpenAI, 1, 1, server.URL)
+			a.configs[schemas.OpenAI].NetworkConfig.MaxRetries = 0
+			a.SetKeysForProvider(schemas.OpenAI, []schemas.Key{{ID: "owned", Value: *schemas.NewSecretVar("synthetic"), Models: schemas.WhiteList{"*"}, Weight: 100}})
+			result := &schemas.LLMPluginShortCircuit{Response: &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{ID: "wrong-shape"}}}
+			if mode == "stream-for-unary" {
+				ch := make(chan *schemas.BifrostStreamChunk)
+				close(ch)
+				result = &schemas.LLMPluginShortCircuit{Stream: ch}
+			}
+			probe := &managedProbe{result: result}
+			client, err := Init(context.Background(), schemas.BifrostConfig{Account: a, Logger: NewNoOpLogger(), ManagedInference: probe})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(client.Shutdown)
+			ctx := schemas.NewBifrostContext(context.Background(), time.Now().Add(3*time.Second))
+			r := &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "owned", Input: []schemas.ChatMessage{{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: new("synthetic")}}}}
+			var bfErr *schemas.BifrostError
+			if mode == "stream-for-unary" {
+				_, bfErr = client.ChatCompletionRequest(ctx, r)
+			} else {
+				_, bfErr = client.ChatCompletionStreamRequest(ctx, r)
+			}
+			if bfErr == nil || bfErr.StatusCode == nil || *bfErr.StatusCode != 503 || bfErr.AllowFallbacks == nil || *bfErr.AllowFallbacks || direct.Load() != 0 {
+				t.Fatalf("malformed managed result escaped: error=%+v native_http=%d", bfErr, direct.Load())
 			}
 		})
 	}

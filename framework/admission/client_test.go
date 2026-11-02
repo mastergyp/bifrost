@@ -11,11 +11,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/grant"
 )
 
 func fixtureRequest() Request {
@@ -565,4 +569,126 @@ func TestOwnedRustInferenceProtocol(t *testing.T) {
 		t.Fatal("Go replayed ticket")
 	}
 	t.Log("owned_rust_inference_protocol_passed=true; synthetic_http_dispatch=true; production_enforcement=false")
+}
+
+func nativeGrantContext(vk, user string, providers []schemas.ProviderPermit) *schemas.BifrostContext {
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	g := grant.New()
+	g.SetIdentity(grant.NewIdentity(grant.NewCredential(grant.CredentialVirtualKey, "synthetic-value-never-read"), &schemas.UserRef{ID: user}, &schemas.EntityRef{ID: vk}, nil, nil, nil, nil))
+	permit := grant.NewPermit(grant.PermitVirtualKey, vk, "synthetic", true, false, providers, nil)
+	g.SetAccess(grant.NewAccess([]schemas.Permit{permit}, nil, "", nil))
+	g.SetLimits(grant.NewLimits(nil, nil))
+	ctx.SetGrant(g)
+	return ctx
+}
+func nativeTargets() []ModelTarget {
+	return []ModelTarget{{Pool: "qwen", Provider: "gpu0", Model: "qwen"}, {Pool: "glm", Provider: "gpu2", Model: "glm"}, {Pool: "ds", Provider: "gpu1", Model: "ds"}}
+}
+func nativePermits(all bool) []schemas.ProviderPermit {
+	result := []schemas.ProviderPermit{{Provider: "gpu0", AllowedModels: schemas.WhiteList{"qwen"}, KeyIDs: schemas.WhiteList{"*"}}}
+	if all {
+		result = append(result, schemas.ProviderPermit{Provider: "gpu2", AllowedModels: schemas.WhiteList{"glm"}, KeyIDs: schemas.WhiteList{"*"}}, schemas.ProviderPermit{Provider: "gpu1", AllowedModels: schemas.WhiteList{"*"}, KeyIDs: schemas.WhiteList{"*"}})
+	}
+	return result
+}
+func TestNativeModelAuthorizationPreservesOriginalScopesAndLimits(t *testing.T) {
+	authorizer, err := NewNativeAuthorizer([]byte(strings.Repeat("s", 32)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, all := range []bool{false, true} {
+		ctx := nativeGrantContext("original-vk", "original-user", nativePermits(all))
+		before := ctx.Grant().Limits()
+		auth, err := authorizer.Authorize(ctx, nativeTargets()[0], nativeTargets())
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"qwen"}
+		if all {
+			want = []string{"qwen", "glm", "ds"}
+		}
+		if !reflect.DeepEqual(auth.Pools, want) || !validDigest(auth.SubjectHash) || auth.OriginalLimits != before || ctx.Grant().Limits() != before {
+			t.Fatalf("native permissions/limits changed: %+v / %v", auth, err)
+		}
+	}
+	providers := nativePermits(true)
+	providers[2].BlacklistedModels = schemas.BlackList{"ds"}
+	ctx := nativeGrantContext("vk", "user", providers)
+	auth, err := authorizer.Authorize(ctx, nativeTargets()[0], nativeTargets())
+	if err != nil || !reflect.DeepEqual(auth.Pools, []string{"qwen", "glm"}) {
+		t.Fatalf("blacklisted model became eligible: %+v / %v", auth, err)
+	}
+	// A broad base composed with a Qwen-only scoping permit must still stay Qwen-only.
+	scope := grant.NewPermit(grant.PermitAccessProfile, "scope", "limited", true, false, nativePermits(false), nil)
+	broad := grant.NewPermit(grant.PermitVirtualKey, "vk", "broad", true, false, nativePermits(true), nil)
+	ctx.Grant().SetAccess(grant.NewAccess([]schemas.Permit{broad}, scope, grant.Intersect, nil))
+	auth, err = authorizer.Authorize(ctx, nativeTargets()[0], nativeTargets())
+	if err != nil || !reflect.DeepEqual(auth.Pools, []string{"qwen"}) {
+		t.Fatal("scoping restriction was broadened")
+	}
+}
+func TestNativeModelAuthorizationRejectsUnsettledAndDelegatedIdentities(t *testing.T) {
+	secret := []byte(strings.Repeat("s", 32))
+	delegated := []string{"gateway-transit"}
+	authorizer, err := NewNativeAuthorizer(secret, delegated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delegated[0] = "changed-by-caller"
+	secret[0] = 'x' // construction owns both inputs
+	ctx := nativeGrantContext("gateway-transit", "gateway-service", nativePermits(true))
+	if _, err = authorizer.Authorize(ctx, nativeTargets()[0], nativeTargets()); !errors.Is(err, ErrDelegationRequired) {
+		t.Fatalf("service VK impersonated its original Gateway user: %v", err)
+	}
+	empty := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	if _, err = authorizer.Authorize(empty, nativeTargets()[0], nativeTargets()); !errors.Is(err, ErrGrantUnresolved) {
+		t.Fatal("missing grant accepted")
+	}
+	g := grant.New()
+	empty.SetGrant(g)
+	if _, err = authorizer.Authorize(empty, nativeTargets()[0], nativeTargets()); !errors.Is(err, ErrGrantUnresolved) || g.Access() != nil {
+		t.Fatal("unsettled access was changed or accepted")
+	}
+	ctx = nativeGrantContext("native", "user", nativePermits(false))
+	if _, err = authorizer.Authorize(ctx, nativeTargets()[2], nativeTargets()); !errors.Is(err, ErrSourceDenied) {
+		t.Fatal("unauthorized source model accepted")
+	}
+}
+func TestNativePrincipalAndExplicitSessionSurviveKeyValueRotationButIsolateUsers(t *testing.T) {
+	authorizer, _ := NewNativeAuthorizer([]byte(strings.Repeat("s", 32)), nil)
+	ctx := nativeGrantContext("stable-key-row", "user-a", nativePermits(true))
+	first, err := authorizer.Authorize(ctx, nativeTargets()[0], nativeTargets())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx.Grant().SetIdentity(grant.NewIdentity(grant.NewCredential(grant.CredentialVirtualKey, "rotated-value"), &schemas.UserRef{ID: "user-a"}, &schemas.EntityRef{ID: "stable-key-row"}, nil, nil, nil, nil))
+	rotated, err := authorizer.Authorize(ctx, nativeTargets()[0], nativeTargets())
+	if err != nil || first.SubjectHash != rotated.SubjectHash {
+		t.Fatal("credential value changed the native principal")
+	}
+	other, err := authorizer.Authorize(nativeGrantContext("stable-key-row", "user-b", nativePermits(true)), nativeTargets()[0], nativeTargets())
+	if err != nil || first.SubjectHash == other.SubjectHash {
+		t.Fatal("different employees share a native subject")
+	}
+	if session, err := authorizer.SessionHash(first.SubjectHash, nil); err != nil || session != nil {
+		t.Fatal("missing conversation was replaced with a user hash")
+	}
+	sessionID := "explicit-conversation"
+	a, _ := authorizer.SessionHash(first.SubjectHash, &sessionID)
+	b, _ := authorizer.SessionHash(other.SubjectHash, &sessionID)
+	if a == nil || b == nil || *a == *b {
+		t.Fatal("conversation leaked across subjects")
+	}
+}
+
+func TestUninitializedNativeAuthorizerCannotMintIdentityOrSession(t *testing.T) {
+	ctx := nativeGrantContext("native", "user", nativePermits(true))
+	for _, a := range []*NativeAuthorizer{nil, {}} {
+		if _, err := a.Authorize(ctx, nativeTargets()[0], nativeTargets()); !errors.Is(err, ErrRejected) {
+			t.Fatal("uninitialized authorizer minted a predictable subject")
+		}
+		if _, err := a.SessionHash(strings.Repeat("a", 64), new("conversation")); !errors.Is(err, ErrRejected) {
+			t.Fatal("uninitialized authorizer minted a predictable session")
+		}
+	}
 }

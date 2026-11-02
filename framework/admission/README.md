@@ -1,7 +1,8 @@
 # Shared physical admission protocol client
 
-Candidate library only. Not registered in any Bifrost plugin or request path;
-no production config, worker, Key, Grant, provider or billing behavior changes.
+Candidate client and authorization library. No HTTP server factory installs a
+managed executor yet; no production configuration, Key or Grant was changed.
+An optional core SDK boundary and real-governance fixture now exist below.
 Prepared tickets can now forward their exact bytes to the local Rust sender.
 No public/provider hook calls this package yet. The existing Gateway quota ledger
 and Bifrost governance remain the respective financial owners.
@@ -83,3 +84,59 @@ The explicit Go/Rust inference probe has now passed with core/client source
 `finished` physical lease, active zero and schema/PG removed. See
 [evidence](evidence/go-rust-managed-inference-20261102.json). This is a local
 transport/execution proof; no public hook, production DB or real model was used.
+
+
+## Optional SDK boundary and original caller authorization
+
+`BifrostConfig.ManagedInference` is a fixed core execution boundary after **all**
+LLM pre-hooks and before provider enqueue, rather than an orderable plugin. Nil
+preserves the original route. Owned inference must return exactly one correctly
+shaped result; nil, multiple results, stream/unary mismatch and managed errors
+fail closed without native fallback or provider I/O. ListModels remains read-only.
+The dispatcher must handle unsupported operations explicitly. Generic realtime,
+raw HTTP paths and transport activation are **not** qualified by this boundary.
+
+Core registers owned work before pre-hooks, fences new work at shutdown and waits
+for accepted streams' original post-hooks before governance cleanup. A trusted
+producer marks its actual final chunk with `FinalForAccounting` (never serialized).
+Core, not a plugin, stamps the reserved final flag. Caller cancellation stops
+socket delivery while late terminal usage still reaches the admitted hooks.
+Implementations must retain their own bounded execution lifetime and may not
+infer physical completion from a disconnect or this marker alone.
+
+`NativeAuthorizer` reads the resolved original Grant. It intersects source and
+candidate model permissions, retains the exact admitted Limits handle, and derives
+HMAC subjects from stable key-row/user IDs. Raw key values, caller `user`, body
+hashes and request IDs are not identities or conversations. Only an explicit
+conversation produces a subject-scoped session. Construction requires a persistent
+internal secret of at least 32 bytes; zero-value authorizers reject requests.
+Configured transit credential IDs require a separate verified delegation path:
+a broad Gateway forwarding key must never become the employee's authorization.
+This helper does **not** validate target budgets, provider-key constraints,
+capabilities, quality, health or execution completion. Those checks are required
+before activation; an allowed model is not by itself an eligible route.
+
+The real-governance fixture is a separate module with explicit local replacements:
+
+```sh
+GOTOOLCHAIN=go1.27.0 go test -C tests/managedadmission -race ./...
+GOTOOLCHAIN=go1.27.0 go test -C tests/managedadmission -race github.com/maximhq/bifrost/plugins/governance
+```
+
+It uses local core/Grant/governance code and a **synthetic** managed producer,
+not Rust, HTTP transport, real models, production data or credentials. Chat and
+Responses, ordinary and cancelled SSE, retain nonzero original budget, token and
+request counters exactly once. Unknown credentials, denied models, transit
+credentials and exhausted budgets never reach provider/key selection. Earlier
+Go/Rust evidence remains a separate transport proof; the two are not a combined
+all-entrance release qualification.
+
+This integration exposed an actual accounting race: the async governance worker
+read response metadata while core rewrote it after post-hooks. Governance now
+prepares scalar cost/token facts synchronously and only persists those facts in
+the worker; later core/plugin mutations cannot change that update. Pricing panic
+containment remains in place. This changes no response bytes/status or cost
+formula; model-access helper and the optional executor remain unreachable from
+the current HTTP server factory. The public provider-harness exemption is limited
+to that absence of a reachable HTTP behavior change. Actual HTTP registration
+must add entrance/auth/usage wire regressions before release.

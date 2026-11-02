@@ -315,6 +315,20 @@ func (e *StreamInterceptionError) Error() string {
 	return "stream interception failed"
 }
 
+// ManagedInference is a deployment-owned dispatch boundary, rather than an
+// orderable plugin. Handle must validate the original Grant and return a response,
+// stream or fail-closed error for every owned inference. A streaming request
+// requires a stream with a final accounting chunk; a unary request a response.
+// Returning nil, multiple results or a mismatched result cannot
+// fall through to the original provider. ListModels is read-only and excluded.
+// Close stops admission, not accepted inference; core joins its post-hooks before
+// cleaning up plugins. Implementations must bound work and preserve accounting.
+type ManagedInference interface {
+	Owns(provider ModelProvider) bool
+	Handle(ctx *BifrostContext, request *BifrostRequest) *LLMPluginShortCircuit
+	Close()
+}
+
 type LLMPlugin interface {
 	BasePlugin
 

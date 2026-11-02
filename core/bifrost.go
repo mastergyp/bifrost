@@ -102,7 +102,11 @@ func (m *ChannelMessage) abandonDelivery() bool {
 type Bifrost struct {
 	ctx                 *schemas.BifrostContext
 	cancel              context.CancelFunc
-	account             schemas.Account                     // account interface
+	account             schemas.Account // account interface
+	managedInference    schemas.ManagedInference
+	managedMu           sync.RWMutex
+	managedStopping     bool
+	managedWG           sync.WaitGroup
 	llmPlugins          atomic.Pointer[[]schemas.LLMPlugin] // list of llm plugins
 	mcpPlugins          atomic.Pointer[[]schemas.MCPPlugin] // list of mcp plugins
 	providers           atomic.Pointer[[]schemas.Provider]  // list of providers
@@ -267,19 +271,20 @@ func Init(ctx context.Context, config schemas.BifrostConfig) (*Bifrost, error) {
 
 	bifrostCtx, cancel := schemas.NewBifrostContextWithCancel(ctx)
 	bifrost := &Bifrost{
-		ctx:           bifrostCtx,
-		cancel:        cancel,
-		account:       config.Account,
-		llmPlugins:    atomic.Pointer[[]schemas.LLMPlugin]{},
-		mcpPlugins:    atomic.Pointer[[]schemas.MCPPlugin]{},
-		requestQueues: sync.Map{},
-		waitGroups:    sync.Map{},
-		keySelector:   config.KeySelector,
-		keyPoolFilter: config.KeyPoolFilter,
-		mcpCredStore:  credstore.NewCredStore(config.OAuth2Provider, config.MCPHeadersProvider, config.Logger),
-		logger:        config.Logger,
-		kvStore:       config.KVStore,
-		modelCatalog:  config.ModelCatalog,
+		ctx:              bifrostCtx,
+		cancel:           cancel,
+		account:          config.Account,
+		managedInference: config.ManagedInference,
+		llmPlugins:       atomic.Pointer[[]schemas.LLMPlugin]{},
+		mcpPlugins:       atomic.Pointer[[]schemas.MCPPlugin]{},
+		requestQueues:    sync.Map{},
+		waitGroups:       sync.Map{},
+		keySelector:      config.KeySelector,
+		keyPoolFilter:    config.KeyPoolFilter,
+		mcpCredStore:     credstore.NewCredStore(config.OAuth2Provider, config.MCPHeadersProvider, config.Logger),
+		logger:           config.Logger,
+		kvStore:          config.KVStore,
+		modelCatalog:     config.ModelCatalog,
 	}
 	bifrost.tracer.Store(&tracerWrapper{tracer: tracer})
 	if config.LLMPlugins == nil {
@@ -5679,8 +5684,21 @@ func (bifrost *Bifrost) handleStreamRequest(ctx *schemas.BifrostContext, req *sc
 
 // tryRequest is a generic function that handles common request processing logic
 // It consolidates queue setup, plugin pipeline execution, enqueue logic, and response handling
-func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostResponse, *schemas.BifrostError) {
+func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (managedResult *schemas.BifrostResponse, managedErr *schemas.BifrostError) {
 	provider, model, _ := req.GetRequestFields()
+	managedDone, admissionErr := bifrost.beginManaged(provider, req.RequestType)
+	if admissionErr != nil {
+		return nil, admissionErr
+	}
+	managedTransferred := false
+	defer func() {
+		if managedDone != nil {
+			managedErr = managedNoFallback(managedErr)
+			if !managedTransferred {
+				managedDone()
+			}
+		}
+	}()
 	pq, err := bifrost.getProviderQueue(provider)
 	if err != nil {
 		bifrostErr := newBifrostError(err)
@@ -5720,6 +5738,9 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 	// no-ops by design; proper request metadata is preserved and tampering is discouraged.
 	preReq, shortCircuit, preCount := pipeline.RunLLMPreHooks(ctx, req)
 	bifrost.endCoreSpan(prePipeSpan)
+	if shortCircuit == nil && preReq != nil {
+		shortCircuit = bifrost.managedBoundary(ctx, preReq, &managedDone, provider)
+	}
 	if shortCircuit != nil {
 		// Handle short-circuit with response (success case)
 		if shortCircuit.Response != nil {
@@ -5965,8 +5986,21 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 
 // tryStreamRequest is a generic function that handles common request processing logic
 // It consolidates queue setup, plugin pipeline execution, enqueue logic, and response handling
-func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (chan *schemas.BifrostStreamChunk, *schemas.BifrostError) {
+func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) (managedResult chan *schemas.BifrostStreamChunk, managedErr *schemas.BifrostError) {
 	provider, model, _ := req.GetRequestFields()
+	managedDone, admissionErr := bifrost.beginManaged(provider, req.RequestType)
+	if admissionErr != nil {
+		return nil, admissionErr
+	}
+	managedTransferred := false
+	defer func() {
+		if managedDone != nil {
+			managedErr = managedNoFallback(managedErr)
+			if !managedTransferred {
+				managedDone()
+			}
+		}
+	}()
 	pq, err := bifrost.getProviderQueue(provider)
 	if err != nil {
 		bifrostErr := newBifrostError(err)
@@ -6024,6 +6058,9 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 	// no-ops by design; proper request metadata is preserved and tampering is discouraged.
 	preReq, shortCircuit, preCount := pipeline.RunLLMPreHooks(ctx, req)
 	bifrost.endCoreSpan(prePipeSpan)
+	if shortCircuit == nil && preReq != nil {
+		shortCircuit = bifrost.managedBoundary(ctx, preReq, &managedDone, provider)
+	}
 	if shortCircuit != nil {
 		// Handle short-circuit with response (success case)
 		if shortCircuit.Response != nil {
@@ -6073,7 +6110,11 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 				return resp, nil
 			}
 
+			managedTransferred = managedDone != nil
 			go func() {
+				if managedDone != nil {
+					defer managedDone()
+				}
 				defer func() {
 					drainAndAttachPluginLogs(ctx) // ensure logs are drained even if stream closes without a final chunk
 					pipeline.FinalizeStreamingPostHookSpans(ctx)
@@ -6107,8 +6148,16 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 						bifrostResponse.ImageGenerationStreamResponse = streamMsg.BifrostImageGenerationStreamResponse
 					}
 
+					// Finality is asserted by the trusted producer, and stamped on
+					// the root in this same goroutine before the original hooks.
+					if streamMsg.FinalForAccounting {
+						ctx.SetValue(schemas.BifrostContextKeyStreamEndIndicator, true)
+					}
 					// Run post hooks on the stream message
 					processedResponse, processedError := pipelinePostHookRunner(ctx, bifrostResponse, streamMsg.BifrostError)
+					if managedDone != nil {
+						processedError = managedNoFallback(processedError)
+					}
 					if consumerGone {
 						continue
 					}
@@ -9528,6 +9577,7 @@ func (bifrost *Bifrost) selectKeyFromProviderForModelWithPool(ctx *schemas.Bifro
 // Shutdown gracefully stops all workers when triggered.
 // It closes all request channels and waits for workers to exit.
 func (bifrost *Bifrost) Shutdown() {
+	bifrost.stopManaged()
 	bifrost.providerLifecycleMu.Lock()
 	defer bifrost.providerLifecycleMu.Unlock()
 

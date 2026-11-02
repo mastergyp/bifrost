@@ -1243,6 +1243,13 @@ func (p *GovernancePlugin) PostLLMHook(ctx *schemas.BifrostContext, result *sche
 		attemptNumber := bifrost.GetIntFromContext(ctx, schemas.BifrostContextKeyNumberOfRetries)
 		routingMetadata, _ := schemas.InitialAttemptRoutingMetadataFromContext(ctx)
 
+		// The response belongs to the remaining post-hooks and core after this
+		// call returns. Freeze only scalar accounting facts while it is borrowed;
+		// the background worker must never retain its mutable payload/metadata.
+		usageUpdate := p.prepareUsageUpdate(result, err, provider, requestedModel, requestType, requestID, billingNonce, isFinalChunk, attemptNumber, pricingScopes, accountedBudgets, accountedRateLimits, routingMetadata)
+		if usageUpdate == nil {
+			return result, err, nil
+		}
 		p.wg.Add(1)
 		go func() {
 			defer p.wg.Done()
@@ -1254,7 +1261,7 @@ func (p *GovernancePlugin) PostLLMHook(ctx *schemas.BifrostContext, result *sche
 				}
 			}()
 			// Use the requested model for usage tracking
-			p.postHookWorker(result, err, provider, requestedModel, requestType, requestID, billingNonce, isFinalChunk, attemptNumber, pricingScopes, accountedBudgets, accountedRateLimits, routingMetadata)
+			p.tracker.UpdateUsage(p.ctx, usageUpdate)
 		}()
 	}
 
@@ -1498,23 +1505,20 @@ func (p *GovernancePlugin) Cleanup() error {
 	return cleanupErr
 }
 
-// postHookWorker is a worker function that processes the response and updates usage tracking
-// It is used to avoid blocking the main thread when updating usage tracking
-// Handles both cases: with virtual key and without virtual key (empty string)
-// When virtualKey is empty, the tracker will only update provider-level and model-level usage
-// Parameters:
-//   - result: The Bifrost response to be processed
-//   - provider: The provider of the request
-//   - model: The model of the request
-//   - requestType: The type of the request
-//   - virtualKey: The raw virtual key token of the request (empty string if not present)
-//   - selectedKeyID: The selected provider key ID used for scoped pricing overrides
-//   - requestID: The request ID
-//   - isCacheRead: Whether the request is a cache read
-//   - isBatch: Whether the request is a batch request
-//   - isFinalChunk: Whether the request is the final chunk
-//   - pricingScopes: Prebuilt pricing lookup scopes using governance VK ID (nil if not applicable)
-func (p *GovernancePlugin) postHookWorker(result *schemas.BifrostResponse, bifrostErr *schemas.BifrostError, provider schemas.ModelProvider, model string, requestType schemas.RequestType, requestID string, billingNonce string, isFinalChunk bool, attemptNumber int, pricingScopes *modelcatalog.PricingLookupScopes, budgets, rateLimits []schemas.Limit, routingMetadata *schemas.BifrostRoutingMetadata) {
+// prepareUsageUpdate reads the borrowed response synchronously and returns only
+// immutable accounting facts. No payload, error, usage or ExtraFields pointer is
+// handed to the asynchronous tracker: later hooks/core may mutate all of them.
+func (p *GovernancePlugin) prepareUsageUpdate(result *schemas.BifrostResponse, bifrostErr *schemas.BifrostError, provider schemas.ModelProvider, model string, requestType schemas.RequestType, requestID string, billingNonce string, isFinalChunk bool, attemptNumber int, pricingScopes *modelcatalog.PricingLookupScopes, budgets, rateLimits []schemas.Limit, routingMetadata *schemas.BifrostRoutingMetadata) (update *UsageUpdate) {
+	// Keep the former worker's panic containment when pricing is moved into
+	// the borrowed-response phase. Persistence remains asynchronous below.
+	defer func() {
+		if r := recover(); r != nil {
+			update = nil
+			if p.logger != nil {
+				p.logger.Error("recovered from panic preparing governance usage: %v", r)
+			}
+		}
+	}()
 	// Determine if request was successful
 	success := (result != nil)
 	billedReason := "success"
@@ -1597,10 +1601,9 @@ func (p *GovernancePlugin) postHookWorker(result *schemas.BifrostResponse, bifro
 			RateLimits:    rateLimits,
 		}
 
-		// Queue usage update asynchronously using tracker
-		// UpdateUsage handles empty virtual keys gracefully by only updating provider-level and model-level usage
-		p.tracker.UpdateUsage(p.ctx, usageUpdate)
+		return usageUpdate
 	}
+	return nil
 }
 
 // GetGovernanceStore returns the governance store
