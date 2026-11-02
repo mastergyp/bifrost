@@ -68,6 +68,34 @@ func (t *Ticket) Cancel(ctx context.Context) (bool, error) {
 	return t.client.cancel(ctx, t.request)
 }
 
+// ConfirmNeverDispatched requires the controller's historical-dispatch check,
+// not merely successful cleanup or absence of currently running work. Old
+// protocol-v1 peers must not authorize a financial no-I/O receipt. A false or
+// unavailable confirmation never permits refund, inference replay or release
+// of work which may already have executed.
+func (t *Ticket) ConfirmNeverDispatched(ctx context.Context) (bool, error) {
+	if t == nil || t.client == nil {
+		return false, ErrRejected
+	}
+	var reply struct {
+		Protocol        int   `json:"protocol"`
+		NeverDispatched *bool `json:"never_dispatched"`
+		EvidenceVersion int   `json:"no_dispatch_evidence_version"`
+	}
+	err := t.client.call(ctx, "cancel", struct {
+		Protocol int    `json:"protocol"`
+		ID       string `json:"id"`
+		Owner    string `json:"owner"`
+	}{1, t.request.ID, t.request.Owner}, &reply)
+	if err != nil {
+		return false, err
+	}
+	if reply.Protocol != 1 || reply.NeverDispatched == nil || reply.EvidenceVersion != 2 {
+		return false, ErrNotEnforced
+	}
+	return *reply.NeverDispatched, nil
+}
+
 type Client struct {
 	socket string
 	http   *http.Client

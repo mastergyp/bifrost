@@ -603,7 +603,50 @@ func TestOwnedRustInferenceProtocol(t *testing.T) {
 	if _, err = ticket.Forward(ctx, Chat, body); !errors.Is(err, ErrRejected) {
 		t.Fatal("Go replayed ticket")
 	}
+	if confirmed, err := ticket.ConfirmNeverDispatched(ctx); err != nil || confirmed {
+		t.Fatalf("a completed actual Rust dispatch was certified as no-I/O: %t / %v", confirmed, err)
+	}
 	t.Log("owned_rust_inference_protocol_passed=true; synthetic_http_dispatch=true; absolute_deadline_preserved=true; production_enforcement=false")
+}
+
+func TestNoDispatchConfirmationRequiresHistoricalEvidenceVersion(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		body      string
+		want      bool
+		wantError bool
+	}{
+		{"prepared-cancelled", `{"protocol":1,"never_dispatched":true,"no_dispatch_evidence_version":2}`, true, false},
+		{"already-executed", `{"protocol":1,"never_dispatched":false,"no_dispatch_evidence_version":2}`, false, false},
+		{"legacy-true", `{"protocol":1,"never_dispatched":true}`, false, true},
+		{"legacy-false", `{"protocol":1,"never_dispatched":false}`, false, true},
+		{"missing-state", `{"protocol":1,"no_dispatch_evidence_version":2}`, false, true},
+		{"null-state", `{"protocol":1,"never_dispatched":null,"no_dispatch_evidence_version":2}`, false, true},
+		{"wrong-version", `{"protocol":1,"never_dispatched":true,"no_dispatch_evidence_version":3}`, false, true},
+		{"wrong-protocol", `{"protocol":2,"never_dispatched":true,"no_dispatch_evidence_version":2}`, false, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			original := fixtureRequest()
+			client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/v1/cancel" || r.Method != http.MethodPost {
+					t.Error("wrong confirmation endpoint")
+				}
+				var input struct {
+					ID    string `json:"id"`
+					Owner string `json:"owner"`
+				}
+				if json.NewDecoder(r.Body).Decode(&input) != nil || input.ID != original.ID || input.Owner != original.Owner {
+					t.Error("confirmation changed original ownership")
+				}
+				_, _ = w.Write([]byte(test.body))
+			})
+			ticket := &Ticket{client: client, request: original}
+			confirmed, err := ticket.ConfirmNeverDispatched(context.Background())
+			if confirmed != test.want || (err != nil) != test.wantError {
+				t.Fatalf("unsafe confirmation: %t / %v", confirmed, err)
+			}
+		})
+	}
 }
 
 func nativeGrantContext(vk, user string, providers []schemas.ProviderPermit) *schemas.BifrostContext {
