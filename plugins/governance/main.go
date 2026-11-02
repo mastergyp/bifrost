@@ -1192,6 +1192,10 @@ func (p *GovernancePlugin) PostLLMHook(ctx *schemas.BifrostContext, result *sche
 	}
 
 	// Build pricing scopes from context using the governance VK ID (not the raw VK token)
+	funding := p.managedFunding(ctx, requestType)
+	if funding != nil {
+		provider = funding.target.Provider
+	}
 	pricingScopes := modelcatalog.PricingLookupScopesFromContext(ctx, string(provider))
 
 	// A caller can ask for the holder's usage not to be counted, leaving what the deployment and the
@@ -1222,6 +1226,9 @@ func (p *GovernancePlugin) PostLLMHook(ctx *schemas.BifrostContext, result *sche
 		var accountedBudgets, accountedRateLimits []schemas.Limit
 		if limits := ctx.Grant().Limits(); limits != nil {
 			accountedBudgets, accountedRateLimits = limits.Budgets(), limits.RateLimits()
+		}
+		if funding != nil {
+			accountedBudgets, accountedRateLimits = funding.combined.Budgets(), funding.combined.RateLimits()
 		}
 		if skipHolderUsage {
 			// The holder's usage is not being counted, so nothing it funds is billed or recorded. What

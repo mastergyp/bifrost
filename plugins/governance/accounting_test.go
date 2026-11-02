@@ -2,12 +2,15 @@ package governance
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	configstoreTables "github.com/maximhq/bifrost/framework/configstore/tables"
+	"github.com/maximhq/bifrost/framework/grant"
 	"github.com/maximhq/bifrost/framework/jobaccounting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -625,4 +628,202 @@ func TestAccounting_RequestsThatSpendNothingAreNotCharged(t *testing.T) {
 			assert.Equal(t, int64(0), rateLimit.TokenCurrentUsage)
 		})
 	}
+}
+
+func managedFundingFixture(t *testing.T, typ schemas.RequestType) (*GovernancePlugin, *LocalGovernanceStore, *schemas.BifrostContext) {
+	t.Helper()
+	logger := NewMockLogger()
+	original := buildBudgetWithUsage("funding-vk", 1000, 13.25, "1d")
+	source := buildBudgetWithUsage("funding-source", 1000, 7, "1d")
+	target := buildBudgetWithUsage("funding-target", 1000, 9.5, "1d")
+	sharedRate := buildRateLimitWithUsage("funding-shared-rate", 1_000_000, 37, 1000, 4)
+	sourceRate := buildRateLimitWithUsage("funding-source-rate", 1_000_000, 11, 1000, 2)
+	targetRate := buildRateLimitWithUsage("funding-target-rate", 1_000_000, 19, 1000, 3)
+	vk := buildVirtualKeyWithBudget("funding-vk-id", "owned-funding-credential", "original funding", original)
+	vk.ProviderConfigs[0].AllowAllKeys = true // explicit keyless private-backend profile
+	vk.RateLimitID = &sharedRate.ID
+	vk.RateLimit = sharedRate
+	catalog := newOfflinePricingCatalog(t)
+	store, err := NewLocalGovernanceStore(context.Background(), logger, nil, &configstore.GovernanceConfig{VirtualKeys: []configstoreTables.TableVirtualKey{*vk}, Budgets: []configstoreTables.TableBudget{*original, *source, *target}, RateLimits: []configstoreTables.TableRateLimit{*sharedRate, *sourceRate, *targetRate}, ModelConfigs: []configstoreTables.TableModelConfig{*buildModelConfig("funding-source-config", "gpt-4o-mini", nil, source, sourceRate), *buildModelConfig("funding-target-config", "gpt-4o", nil, target, targetRate)}}, catalog, nil)
+	require.NoError(t, err)
+	plugin, err := InitFromStore(context.Background(), &Config{IsVkMandatory: boolPtr(true)}, logger, store, nil, catalog, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, plugin.Cleanup()) })
+	ctx := resolverCtx(store, "owned-funding-credential")
+	ctx.SetValue(schemas.BifrostContextKeyRequestID, "owned-funding-"+t.Name())
+	req := &schemas.BifrostRequest{RequestType: typ, ChatRequest: &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "gpt-4o-mini"}}
+	if typ == schemas.ResponsesRequest || typ == schemas.ResponsesStreamRequest {
+		req.ChatRequest = nil
+		req.ResponsesRequest = &schemas.BifrostResponsesRequest{Provider: schemas.OpenAI, Model: "gpt-4o-mini"}
+	}
+	_, denied, err := plugin.PreLLMHook(ctx, req)
+	require.NoError(t, err)
+	require.Nil(t, denied)
+	return plugin, store, ctx
+}
+
+func TestManagedFundingPreservesOriginalAndSelectedPayersAndPricesTargetOnce(t *testing.T) {
+	for _, typ := range []schemas.RequestType{schemas.ChatCompletionRequest, schemas.ChatCompletionStreamRequest, schemas.ResponsesRequest, schemas.ResponsesStreamRequest} {
+		t.Run(string(typ), func(t *testing.T) {
+			plugin, store, ctx := managedFundingFixture(t, typ)
+			original := ctx.Grant().Limits()
+			identity := ctx.Grant().Identity()
+			target := schemas.Route{Provider: schemas.OpenAI, Model: "gpt-4o"}
+			funding, denied := plugin.CheckManagedTarget(ctx, typ, target, time.Now().Add(time.Minute))
+			require.Nil(t, denied)
+			require.NotNil(t, funding)
+			require.Nil(t, funding.Bind(ctx))
+			require.Same(t, original, ctx.Grant().Limits())
+			require.Same(t, identity, ctx.Grant().Identity())
+			before := store.GetGovernanceData(context.Background())
+			require.Equal(t, 13.25, before.Budgets["funding-vk"].CurrentUsage)
+			require.Equal(t, int64(4), before.RateLimits["funding-shared-rate"].RequestCurrentUsage)
+			usage := &schemas.BifrostLLMUsage{PromptTokens: 5, CompletionTokens: 2, TotalTokens: 7}
+			response := &schemas.BifrostResponse{}
+			switch typ {
+			case schemas.ChatCompletionRequest, schemas.ChatCompletionStreamRequest:
+				response.ChatResponse = &schemas.BifrostChatResponse{Model: target.Model, Usage: usage}
+			case schemas.ResponsesRequest:
+				response.ResponsesResponse = &schemas.BifrostResponsesResponse{Model: target.Model, Usage: &schemas.ResponsesResponseUsage{InputTokens: 5, OutputTokens: 2, TotalTokens: 7}}
+			case schemas.ResponsesStreamRequest:
+				response.ResponsesStreamResponse = &schemas.BifrostResponsesStreamResponse{Type: schemas.ResponsesStreamResponseTypeCompleted, Response: &schemas.BifrostResponsesResponse{Model: target.Model, Usage: &schemas.ResponsesResponseUsage{InputTokens: 5, OutputTokens: 2, TotalTokens: 7}}}
+			}
+			response.PopulateExtraFields(typ, schemas.OpenAI, "gpt-4o-mini", "gpt-4o-mini")
+			response.PopulateRoutingInfo((schemas.ManagedExecutionRoute{Requested: schemas.Route{Provider: schemas.OpenAI, Model: "gpt-4o-mini"}, Resolved: target, Foreign: true}).RoutingInfo())
+			targetCost := plugin.modelCatalog.CalculateCost(response, nil)
+			sourceCost := plugin.modelCatalog.CalculateCostForUsage(usage, schemas.OpenAI, "gpt-4o-mini", schemas.ChatCompletionRequest, nil)
+			require.Greater(t, targetCost, sourceCost)
+			// Final accepted usage survives caller cancellation, expiry, and later config
+			// changes; settlement reads the approved handles, never re-resolved payers.
+			ctx.SetValue(schemas.BifrostContextKeyStreamEndIndicator, true)
+			ctx.Cancel()
+			store.UpdateModelConfigInMemory(context.Background(), buildModelConfig("funding-target-config", "gpt-4o", nil, buildBudget("later-unchecked-budget", 1000, "1d"), nil))
+			for range 2 {
+				_, _, err := plugin.PostLLMHook(ctx, response, nil)
+				require.NoError(t, err)
+			}
+			plugin.wg.Wait()
+			after := store.GetGovernanceData(context.Background())
+			for id, start := range map[string]float64{"funding-vk": 13.25, "funding-source": 7, "funding-target": 9.5} {
+				assert.InDelta(t, start+targetCost, after.Budgets[id].CurrentUsage, 1e-12, "budget %s", id)
+			}
+			for id, start := range map[string][2]int64{"funding-shared-rate": {37, 4}, "funding-source-rate": {11, 2}, "funding-target-rate": {19, 3}} {
+				assert.Equal(t, start[0]+7, after.RateLimits[id].TokenCurrentUsage, id)
+				assert.Equal(t, start[1]+1, after.RateLimits[id].RequestCurrentUsage, id)
+			}
+			assert.Zero(t, after.Budgets["later-unchecked-budget"].CurrentUsage)
+			assert.Same(t, original, ctx.Grant().Limits())
+			budgets, _ := ctx.Value(schemas.BifrostContextKeyGovernanceBudgetIDs).([]string)
+			assert.ElementsMatch(t, []string{"funding-vk", "funding-source", "funding-target"}, budgets)
+		})
+	}
+}
+
+func TestManagedFundingDeniedCandidateDoesNotPoisonOriginalOrDebitCounters(t *testing.T) {
+	plugin, store, ctx := managedFundingFixture(t, schemas.ChatCompletionRequest)
+	original := ctx.Grant().Limits()
+	require.NoError(t, store.BumpBudgetUsage(context.Background(), "funding-target", 1000))
+	approval, denied := plugin.CheckManagedTarget(ctx, schemas.ChatCompletionRequest, schemas.Route{Provider: schemas.OpenAI, Model: "gpt-4o"}, time.Now().Add(time.Minute))
+	require.Nil(t, approval)
+	require.NotNil(t, denied)
+	require.NotNil(t, denied.StatusCode)
+	assert.Equal(t, 402, *denied.StatusCode)
+	assert.Nil(t, ctx.Value(governanceRejectedContextKey))
+	assert.Same(t, original, ctx.Grant().Limits())
+	next, err := plugin.CheckManagedTarget(ctx, schemas.ChatCompletionRequest, schemas.Route{Provider: schemas.OpenAI, Model: "gpt-4o-mini"}, time.Now().Add(time.Minute))
+	require.Nil(t, err)
+	require.NotNil(t, next)
+	require.Nil(t, next.Bind(ctx))
+	data := store.GetGovernanceData(context.Background())
+	assert.Equal(t, 13.25, data.Budgets["funding-vk"].CurrentUsage)
+	assert.Equal(t, int64(4), data.RateLimits["funding-shared-rate"].RequestCurrentUsage)
+}
+
+func TestManagedFundingCannotBindAnotherRequestExpiredOrReplacedGrant(t *testing.T) {
+	for _, kind := range []string{"foreign-context", "expired", "replaced-limits", "second-target", "restricted-keys", "key-pin", "denied-model"} {
+		t.Run(kind, func(t *testing.T) {
+			plugin, _, ctx := managedFundingFixture(t, schemas.ChatCompletionRequest)
+			if kind == "key-pin" {
+				ctx.SetValue(schemas.BifrostContextKeyAPIKeyID, "not-a-registered-managed-key")
+			}
+			if kind == "restricted-keys" {
+				ctx.Grant().SetAccess(grant.NewAccess([]schemas.Permit{grant.NewPermit(grant.PermitVirtualKey, "funding-vk-id", "restricted", true, false, []schemas.ProviderPermit{{Provider: "openai", AllowedModels: schemas.WhiteList{"*"}, KeyIDs: schemas.WhiteList{"one-specific-key"}}}, nil)}, nil, "", nil))
+			}
+			target := schemas.Route{Provider: schemas.OpenAI, Model: "gpt-4o"}
+			if kind == "denied-model" {
+				target.Provider = schemas.Anthropic
+			}
+			funding, denied := plugin.CheckManagedTarget(ctx, schemas.ChatCompletionRequest, target, time.Now().Add(time.Minute))
+			if kind == "restricted-keys" || kind == "key-pin" || kind == "denied-model" {
+				require.NotNil(t, denied)
+				require.Nil(t, funding)
+				return
+			}
+			require.Nil(t, denied)
+			bindCtx := ctx
+			switch kind {
+			case "foreign-context":
+				bindCtx = schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+				bindCtx.SetGrant(ctx.Grant())
+			case "expired":
+				funding.validUntil = time.Now().Add(-time.Second)
+			case "replaced-limits":
+				ctx.Grant().SetLimits(grant.NewLimits(nil, nil))
+			case "second-target":
+				other, err := plugin.CheckManagedTarget(ctx, schemas.ChatCompletionRequest, schemas.Route{Provider: schemas.OpenAI, Model: "gpt-4o-mini"}, time.Now().Add(time.Minute))
+				require.Nil(t, err)
+				require.Nil(t, other.Bind(ctx))
+			}
+			require.NotNil(t, funding.Bind(bindCtx), fmt.Sprint(kind))
+		})
+	}
+}
+
+func TestManagedFundingRechecksLiveOriginalAndTargetLimitsAfterQueueing(t *testing.T) {
+	for _, kind := range []string{"original-budget", "target-rate", "deadline"} {
+		t.Run(kind, func(t *testing.T) {
+			plugin, store, ctx := managedFundingFixture(t, schemas.ChatCompletionRequest)
+			original := ctx.Grant().Limits()
+			deadline := time.Now().Add(time.Minute)
+			expected := 402
+			switch kind {
+			case "original-budget":
+				require.NoError(t, store.BumpBudgetUsage(context.Background(), "funding-source", 1000))
+			case "target-rate":
+				require.NoError(t, store.BumpRateLimitUsage(context.Background(), "funding-target-rate", 1_000_000, true, true))
+				expected = 429
+			case "deadline":
+				deadline = time.Now().Add(-time.Second)
+				expected = 408
+			}
+			funding, denied := plugin.CheckManagedTarget(ctx, schemas.ChatCompletionRequest, schemas.Route{Provider: schemas.OpenAI, Model: "gpt-4o"}, deadline)
+			require.Nil(t, funding)
+			require.NotNil(t, denied)
+			require.NotNil(t, denied.StatusCode)
+			assert.Equal(t, expected, *denied.StatusCode)
+			assert.Same(t, original, ctx.Grant().Limits())
+			assert.Nil(t, ctx.Value(managedFundingKey{}))
+			assert.Nil(t, ctx.Value(governanceRejectedContextKey))
+			data := store.GetGovernanceData(context.Background())
+			assert.Equal(t, 13.25, data.Budgets["funding-vk"].CurrentUsage)
+			assert.Equal(t, int64(4), data.RateLimits["funding-shared-rate"].RequestCurrentUsage)
+		})
+	}
+}
+
+type failedManagedFundingStore struct{ GovernanceStore }
+
+func (s failedManagedFundingStore) CheckBudgets(context.Context, []schemas.Limit, map[string]float64) (Decision, error) {
+	return DecisionAllow, errors.New("owned synthetic funding-store failure")
+}
+func TestManagedFundingStoreErrorCannotBeTreatedAsAllow(t *testing.T) {
+	plugin, _, ctx := managedFundingFixture(t, schemas.ChatCompletionRequest)
+	plugin.store = failedManagedFundingStore{plugin.store}
+	funding, denied := plugin.CheckManagedTarget(ctx, schemas.ChatCompletionRequest, schemas.Route{Provider: schemas.OpenAI, Model: "gpt-4o"}, time.Now().Add(time.Minute))
+	require.Nil(t, funding)
+	require.NotNil(t, denied)
+	require.NotNil(t, denied.StatusCode)
+	assert.Equal(t, 503, *denied.StatusCode)
+	assert.Nil(t, ctx.Value(managedFundingKey{}))
+	assert.Nil(t, ctx.Value(governanceRejectedContextKey))
 }

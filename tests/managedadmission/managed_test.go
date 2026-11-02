@@ -124,12 +124,13 @@ func (m *managed) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest)
 }
 
 type fixture struct {
-	client  *bifrost.Bifrost
-	store   *governance.LocalGovernanceStore
-	catalog *modelcatalog.ModelCatalog
-	managed *managed
-	account *account
-	runtime *admission.Runtime
+	client     *bifrost.Bifrost
+	store      *governance.LocalGovernanceStore
+	catalog    *modelcatalog.ModelCatalog
+	managed    *managed
+	account    *account
+	runtime    *admission.Runtime
+	governance *governance.GovernancePlugin
 }
 
 func newFixture(t *testing.T, delegated bool, withRuntime ...bool) *fixture {
@@ -210,7 +211,7 @@ func fixtureWithInner(t *testing.T, delegated, useRuntime bool, inner schemas.Ma
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fixture{client, store, catalog, manager, a, runtime}
+	f := &fixture{client, store, catalog, manager, a, runtime, plugin}
 	t.Cleanup(func() { manager.finish(); client.Shutdown() })
 	return f
 }

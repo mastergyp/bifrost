@@ -18,6 +18,7 @@ import (
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/admission"
+	"github.com/maximhq/bifrost/plugins/governance"
 )
 
 type fixedPreparation struct {
@@ -27,6 +28,24 @@ type fixedPreparation struct {
 
 func (p fixedPreparation) Prepare(_ *schemas.BifrostContext, _ admission.FrozenInput, _ *admission.Principal) (admission.Preparation, error) {
 	return admission.Preparation{Pools: []string{p.pool}, HealthyEngines: p.engines, Cost: 17, NativeWeight: 7}, nil
+}
+
+func (p fixedPreparation) AuthorizeSelected(_ *schemas.BifrostContext, _ *admission.Principal, lease admission.Lease, _ schemas.RequestType) (admission.ModelTarget, *schemas.BifrostError) {
+	return admission.ModelTarget{Pool: lease.Pool, Provider: schemas.OpenAI, Model: model}, nil
+}
+
+type fundedPreparation struct {
+	fixedPreparation
+	governance *governance.GovernancePlugin
+}
+
+func (p *fundedPreparation) AuthorizeSelected(ctx *schemas.BifrostContext, principal *admission.Principal, lease admission.Lease, typ schemas.RequestType) (admission.ModelTarget, *schemas.BifrostError) {
+	target, _ := p.fixedPreparation.AuthorizeSelected(ctx, principal, lease, typ)
+	funding, denied := p.governance.CheckManagedTarget(ctx, typ, schemas.Route{Provider: target.Provider, Model: target.Model}, principal.QueueDeadline())
+	if denied != nil {
+		return admission.ModelTarget{}, denied
+	}
+	return target, funding.Bind(ctx)
 }
 
 type ownedSocket struct {
@@ -152,11 +171,13 @@ func TestConcreteProducerHTTPOriginalGovernanceAndCancelledStreams(t *testing.T)
 
 func exerciseConcreteCall(t *testing.T, control *admission.Client, pool string, engines []string, gateway bool, api string, stream bool, caseName string) *admission.Producer {
 	t.Helper()
-	producer, err := admission.NewProducer(control, fixedPreparation{pool, engines}, []schemas.ModelProvider{schemas.OpenAI}, 4, bifrost.NewNoOpLogger())
+	policy := &fundedPreparation{fixedPreparation: fixedPreparation{pool, engines}}
+	producer, err := admission.NewProducer(control, policy, []schemas.ModelProvider{schemas.OpenAI}, 4, bifrost.NewNoOpLogger())
 	if err != nil {
 		t.Fatal(err)
 	}
 	f := fixtureWithInner(t, false, true, producer, pool)
+	policy.governance = f.governance
 	base, client := ownedHTTP(t, f)
 	body := map[string]any{"model": "openai/" + model, "temperature": 0.25, "stream": stream}
 	if api == string(admission.Chat) {
@@ -240,10 +261,34 @@ func TestOwnedRustBifrostProducerProtocol(t *testing.T) {
 			}
 		}
 	}
+
+	t.Run("selected target budget denial", func(t *testing.T) {
+		control, err := admission.New(socket)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer control.Close()
+		producer, err := admission.NewProducer(control, deniedSelectedPreparation{fixedPreparation{"qwen", engines}}, []schemas.ModelProvider{schemas.OpenAI}, 4, bifrost.NewNoOpLogger())
+		if err != nil {
+			t.Fatal(err)
+		}
+		f := fixtureWithInner(t, false, true, producer, "qwen")
+		ctx, cancel := ctxFor(vkValue)
+		defer cancel()
+		_, failure := f.client.ChatCompletionRequest(ctx, request(model))
+		f.client.Shutdown()
+		if failure == nil || failure.StatusCode == nil || *failure.StatusCode != 402 {
+			t.Fatalf("real selected denial failed: %v", failure)
+		}
+		f.assertUntouched(t)
+		if producer.ActiveOperations() != 0 {
+			t.Fatal("denied real selected target retained resources")
+		}
+	})
 	if t.Failed() {
 		return
 	}
-	t.Log("owned_bifrost_rust_producer_passed=true; actual_canonical_http_cases=8; original_accounting_preserved=true")
+	t.Log("owned_bifrost_rust_producer_passed=true; actual_canonical_http_cases=8; original_accounting_preserved=true; selected_target_denials=1")
 }
 
 func TestConcreteProducerRejectsBroaderPoolBeforeAdmission(t *testing.T) {
@@ -310,6 +355,10 @@ func TestConcreteProducerRejectsReplayedGatewayCallID(t *testing.T) {
 
 type cancelledPreparation struct{ started chan struct{} }
 
+func (p cancelledPreparation) AuthorizeSelected(_ *schemas.BifrostContext, _ *admission.Principal, _ admission.Lease, _ schemas.RequestType) (admission.ModelTarget, *schemas.BifrostError) {
+	return admission.ModelTarget{}, &schemas.BifrostError{StatusCode: new(503), Error: &schemas.ErrorField{Message: "cancelled fixture must not dispatch"}}
+}
+
 func (p cancelledPreparation) Prepare(ctx *schemas.BifrostContext, _ admission.FrozenInput, _ *admission.Principal) (admission.Preparation, error) {
 	close(p.started)
 	<-ctx.Done()
@@ -344,5 +393,82 @@ func TestConcreteProducerCancellationBeforePreparationNeverQueues(t *testing.T) 
 	defer state.mu.Unlock()
 	if len(state.requests) != 0 || state.data != 0 || producer.ActiveOperations() != 0 {
 		t.Fatal("cancelled preparation retained work")
+	}
+}
+
+// Before this guard was wired, a prepared physical target could start inference
+// even though its selected-target financial policy explicitly refused it.
+type deniedSelectedPreparation struct{ fixedPreparation }
+
+func (p deniedSelectedPreparation) AuthorizeSelected(_ *schemas.BifrostContext, _ *admission.Principal, _ admission.Lease, _ schemas.RequestType) (admission.ModelTarget, *schemas.BifrostError) {
+	return admission.ModelTarget{}, &schemas.BifrostError{StatusCode: new(402), Error: &schemas.ErrorField{Message: "selected target budget exhausted"}}
+}
+func TestConcreteProducerSelectedBudgetDenialNeverDispatchesOrSpends(t *testing.T) {
+	control, state := ownedPhysicalSocket(t)
+	producer, err := admission.NewProducer(control, deniedSelectedPreparation{fixedPreparation{"home", []string{"owned-engine"}}}, []schemas.ModelProvider{schemas.OpenAI}, 4, bifrost.NewNoOpLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := fixtureWithInner(t, false, true, producer, "home")
+	ctx, cancel := ctxFor(vkValue)
+	defer cancel()
+	_, failure := f.client.ChatCompletionRequest(ctx, request(model))
+	f.client.Shutdown()
+	if failure == nil || failure.StatusCode == nil || *failure.StatusCode != 402 {
+		t.Fatalf("selected target policy did not block inference: %v", failure)
+	}
+	f.assertUntouched(t)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.data != 0 || producer.ActiveOperations() != 0 {
+		t.Fatal("denied selected target dispatched or retained producer resources")
+	}
+}
+
+type selectedFaultPreparation struct {
+	fixedPreparation
+	kind   string
+	cancel context.CancelFunc
+}
+
+func (p selectedFaultPreparation) AuthorizeSelected(_ *schemas.BifrostContext, _ *admission.Principal, lease admission.Lease, _ schemas.RequestType) (admission.ModelTarget, *schemas.BifrostError) {
+	target := admission.ModelTarget{Pool: lease.Pool, Provider: schemas.OpenAI, Model: model}
+	switch p.kind {
+	case "pool":
+		target.Pool = "foreign"
+	case "scope":
+		target.Model = "not-granted"
+	case "cancel":
+		p.cancel()
+	}
+	return target, nil
+}
+func TestConcreteProducerSelectedTargetScopeOrCancellationNeverDispatches(t *testing.T) {
+	for _, kind := range []string{"pool", "scope", "cancel"} {
+		t.Run(kind, func(t *testing.T) {
+			control, state := ownedPhysicalSocket(t)
+			ctx, cancel := ctxFor(vkValue)
+			defer cancel()
+			producer, err := admission.NewProducer(control, selectedFaultPreparation{fixedPreparation{"home", []string{"owned-engine"}}, kind, cancel}, []schemas.ModelProvider{schemas.OpenAI}, 4, bifrost.NewNoOpLogger())
+			if err != nil {
+				t.Fatal(err)
+			}
+			f := fixtureWithInner(t, false, true, producer, "home")
+			_, failure := f.client.ChatCompletionRequest(ctx, request(model))
+			f.client.Shutdown()
+			expected := 403
+			if kind == "cancel" {
+				expected = 408
+			}
+			if failure == nil || failure.StatusCode == nil || *failure.StatusCode != expected {
+				t.Fatalf("selected %s status: %v", kind, failure)
+			}
+			f.assertUntouched(t)
+			state.mu.Lock()
+			defer state.mu.Unlock()
+			if state.data != 0 || producer.ActiveOperations() != 0 {
+				t.Fatal("unqualified selected target dispatched or retained resources")
+			}
+		})
 	}
 }

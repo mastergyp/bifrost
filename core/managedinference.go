@@ -1,6 +1,30 @@
 package bifrost
 
-import "github.com/maximhq/bifrost/core/schemas"
+import (
+	"strings"
+
+	"github.com/maximhq/bifrost/core/schemas"
+)
+
+func selectedManagedRoute(result *schemas.LLMPluginShortCircuit, registered bool) *schemas.ManagedExecutionRoute {
+	if !registered || result == nil || result.ManagedRoute == nil {
+		return nil
+	}
+	copy := *result.ManagedRoute
+	return &copy
+}
+
+func restoreManagedRoute(result *schemas.BifrostResponse, err *schemas.BifrostError, route *schemas.ManagedExecutionRoute) {
+	if route == nil {
+		return
+	}
+	if result != nil {
+		result.PopulateRoutingInfo(route.RoutingInfo())
+	}
+	if err != nil {
+		err.PopulateRoutingInfo(route.RoutingInfo())
+	}
+}
 
 func (b *Bifrost) captureManagedRequest(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) {
 	// Nil-context calls use the shared core context and have no original
@@ -91,6 +115,19 @@ func (b *Bifrost) managedBoundary(ctx *schemas.BifrostContext, req *schemas.Bifr
 	result := b.managedInference.Handle(ctx, req)
 	if result == nil {
 		return &schemas.LLMPluginShortCircuit{Error: managedFailure()}
+	}
+	if route := result.ManagedRoute; route != nil {
+		for _, candidate := range []schemas.Route{route.Requested, route.Resolved} {
+			if candidate.Provider == "" || candidate.Model == "" || len(candidate.Provider) > 256 || len(candidate.Model) > 256 || candidate.KeyID != "" ||
+				strings.TrimSpace(candidate.Model) != candidate.Model {
+				drainAbandonedStream(result.Stream)
+				return &schemas.LLMPluginShortCircuit{Error: managedFailure()}
+			}
+		}
+		if !b.managedInference.Owns(route.Resolved.Provider) {
+			drainAbandonedStream(result.Stream)
+			return &schemas.LLMPluginShortCircuit{Error: managedFailure()}
+		}
 	}
 	count := 0
 	if result.Response != nil {

@@ -344,6 +344,26 @@ type ManagedRequestSnapshot interface {
 	CaptureRequest(ctx *BifrostContext, request *BifrostRequest)
 }
 
+// ManagedExecutionRoute contains only bounded registry-owned names, never a
+// payload or key value. The core accepts it only on a registered managed call.
+type ManagedExecutionRoute struct {
+	Requested Route
+	Resolved  Route
+	Foreign   bool
+}
+
+// RoutingInfo returns fresh small pointer fields, so a post-hook cannot mutate
+// the immutable selected target used by a later chunk or the core's restore.
+func (r ManagedExecutionRoute) RoutingInfo() RoutingInfo {
+	info := RoutingInfo{Provider: r.Resolved.Provider, Model: r.Requested.Model, IsFallback: r.Foreign,
+		ResolvedKeyAlias: &ResolvedKeyAlias{ModelID: r.Resolved.Model}}
+	if r.Foreign {
+		provider, model := r.Requested.Provider, r.Requested.Model
+		info.PrimaryProvider, info.PrimaryModel = &provider, &model
+	}
+	return info
+}
+
 // ManagedShortcutPolicy validates successful pre-hook/cache results without
 // dispatching inference. Unqualified replies must not bypass original-caller
 // or actual-target policy; ordinary pre-hook denials retain their original error.

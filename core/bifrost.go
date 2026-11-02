@@ -5748,7 +5748,9 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 	if shortCircuit != nil {
 		// Handle short-circuit with response (success case)
 		if shortCircuit.Response != nil {
+			selectedRoute := selectedManagedRoute(shortCircuit, managedDone != nil)
 			shortCircuit.Response.PopulateExtraFields(req.RequestType, provider, model, model)
+			restoreManagedRoute(shortCircuit.Response, nil, selectedRoute)
 			// Cache hit / short-circuit: upstream 0, overhead is the whole request.
 			// Stamp before post-hooks for logging.
 			populateLatencyExtraFields(ctx, shortCircuit.Response)
@@ -5758,6 +5760,7 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 			} else if resp != nil {
 				resp.PopulateExtraFields(req.RequestType, provider, model, model)
 			}
+			restoreManagedRoute(resp, bifrostErr, selectedRoute)
 			drainAndAttachPluginLogs(ctx)
 			if bifrostErr != nil {
 				return nil, bifrostErr
@@ -5766,13 +5769,16 @@ func (bifrost *Bifrost) tryRequest(ctx *schemas.BifrostContext, req *schemas.Bif
 		}
 		// Handle short-circuit with error
 		if shortCircuit.Error != nil {
+			selectedRoute := selectedManagedRoute(shortCircuit, managedDone != nil)
 			shortCircuit.Error.PopulateExtraFields(req.RequestType, provider, model, model)
+			restoreManagedRoute(nil, shortCircuit.Error, selectedRoute)
 			resp, bifrostErr := pipeline.RunPostLLMHooks(ctx, nil, shortCircuit.Error, preCount)
 			if bifrostErr != nil {
 				bifrostErr.PopulateExtraFields(req.RequestType, provider, model, model)
 			} else if resp != nil {
 				resp.PopulateExtraFields(req.RequestType, provider, model, model)
 			}
+			restoreManagedRoute(resp, bifrostErr, selectedRoute)
 			drainAndAttachPluginLogs(ctx)
 			if bifrostErr != nil {
 				return nil, bifrostErr
@@ -6094,6 +6100,7 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 			// back to bifrostRequestPool when handleStreamRequest returns (via defer);
 			// a concurrent request can reuse it and overwrite RequestType.
 			shortCircuitRequestType := req.RequestType
+			selectedRoute := selectedManagedRoute(shortCircuit, managedDone != nil)
 			// Create a post hook runner cause pipeline object is put back in the pool on defer
 			pipelinePostHookRunner := func(ctx *schemas.BifrostContext, result *schemas.BifrostResponse, err *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError) {
 				if result != nil {
@@ -6102,16 +6109,19 @@ func (bifrost *Bifrost) tryStreamRequest(ctx *schemas.BifrostContext, req *schem
 				if err != nil {
 					err.PopulateExtraFields(shortCircuitRequestType, provider, model, model)
 				}
+				restoreManagedRoute(result, err, selectedRoute)
 				resp, bifrostErr := pipeline.RunPostLLMHooks(ctx, result, err, preCount)
 				if IsFinalChunk(ctx) {
 					drainAndAttachPluginLogs(ctx)
 				}
 				if bifrostErr != nil {
 					bifrostErr.PopulateExtraFields(shortCircuitRequestType, provider, model, model)
+					restoreManagedRoute(nil, bifrostErr, selectedRoute)
 					return nil, bifrostErr
 				} else if resp != nil {
 					resp.PopulateExtraFields(shortCircuitRequestType, provider, model, model)
 				}
+				restoreManagedRoute(resp, nil, selectedRoute)
 				return resp, nil
 			}
 

@@ -950,3 +950,93 @@ func TestManagedPreHookShortcutsCannotSkipProvenancePolicy(t *testing.T) {
 		})
 	}
 }
+
+type managedRouteHooks struct {
+	terminalHookCounter
+	observed atomic.Int64
+	bad      atomic.Bool
+}
+
+func (h *managedRouteHooks) PostLLMHook(_ *schemas.BifrostContext, result *schemas.BifrostResponse, err *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
+	if result != nil {
+		ef := result.GetExtraFields()
+		if ef.RoutingInfo.Provider != schemas.OpenAI || ef.RoutingInfo.ResolvedKeyAlias == nil || ef.RoutingInfo.ResolvedKeyAlias.ModelID != "selected-bigger" || ef.OriginalModelRequested != "original-small" || ef.ResolvedModelUsed != "selected-bigger" {
+			h.bad.Store(true)
+		}
+		h.observed.Add(1)
+		// Mutate nested fields as well as the legacy triplet. Core must restore
+		// fresh selected-target fields for this result and every subsequent chunk.
+		if ef.RoutingInfo.ResolvedKeyAlias != nil {
+			ef.RoutingInfo.ResolvedKeyAlias.ModelID = "tampered"
+		}
+		if ef.RoutingInfo.PrimaryModel != nil {
+			*ef.RoutingInfo.PrimaryModel = "tampered"
+		}
+		ef.Provider = schemas.Anthropic
+		ef.ResolvedModelUsed = "tampered"
+	}
+	return result, err, nil
+}
+func TestManagedSelectedRouteRemainsAuthoritativeAcrossPostHooksAndChunks(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		t.Run(fmt.Sprint(stream), func(t *testing.T) {
+			account := NewMockAccount()
+			account.AddProvider(schemas.OpenAI, 1, 1)
+			hooks := &managedRouteHooks{}
+			selected := &schemas.ManagedExecutionRoute{Requested: schemas.Route{Provider: schemas.OpenAI, Model: "original-small"}, Resolved: schemas.Route{Provider: schemas.OpenAI, Model: "selected-bigger"}, Foreign: true}
+			result := &schemas.LLMPluginShortCircuit{ManagedRoute: selected}
+			if stream {
+				ch := make(chan *schemas.BifrostStreamChunk, 2)
+				for i := range 2 {
+					ch <- &schemas.BifrostStreamChunk{FinalForAccounting: i == 1, BifrostChatResponse: &schemas.BifrostChatResponse{Model: "selected-bigger", Choices: []schemas.BifrostResponseChoice{{Index: 0, ChatStreamResponseChoice: &schemas.ChatStreamResponseChoice{Delta: &schemas.ChatStreamResponseChoiceDelta{Content: new("owned")}}}}}}
+				}
+				close(ch)
+				result.Stream = ch
+			} else {
+				result.Response = &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{ID: "owned-managed", Model: "selected-bigger"}}
+			}
+			probe := &managedProbe{result: result}
+			client, err := Init(context.Background(), schemas.BifrostConfig{Account: account, Logger: NewNoOpLogger(), LLMPlugins: []schemas.LLMPlugin{hooks}, ManagedInference: probe})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(client.Shutdown)
+			ctx, cancel := schemas.NewBifrostContextWithCancel(context.Background())
+			defer cancel()
+			req := &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "original-small", Input: []schemas.ChatMessage{{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: new("owned")}}}}
+			check := func(ef schemas.BifrostResponseExtraFields) {
+				if ef.RoutingInfo.ResolvedKeyAlias == nil || ef.RoutingInfo.ResolvedKeyAlias.ModelID != "selected-bigger" || ef.OriginalModelRequested != "original-small" || ef.ResolvedModelUsed != "selected-bigger" || ef.Provider != schemas.OpenAI {
+					t.Fatal("selected routing changed after post-hook")
+				}
+			}
+			if stream {
+				ch, failure := client.ChatCompletionStreamRequest(ctx, req)
+				if failure != nil {
+					t.Fatal(failure)
+				}
+				for chunk := range ch {
+					if chunk.BifrostChatResponse != nil {
+						check(chunk.BifrostChatResponse.ExtraFields)
+					}
+				}
+			} else {
+				response, failure := client.ChatCompletionRequest(ctx, req)
+				if failure != nil {
+					t.Fatal(failure)
+				}
+				check(response.ExtraFields)
+			}
+			client.Shutdown()
+			expected := int64(1)
+			if stream {
+				expected = 2
+			}
+			if hooks.bad.Load() || hooks.observed.Load() != expected {
+				t.Fatalf("hooks did not see authoritative routing: bad=%t seen=%d", hooks.bad.Load(), hooks.observed.Load())
+			}
+			if selected.Requested.Model != "original-small" || selected.Resolved.Model != "selected-bigger" {
+				t.Fatal("post-hook mutated the selected route snapshot")
+			}
+		})
+	}
+}
