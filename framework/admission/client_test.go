@@ -56,7 +56,7 @@ func respond(w http.ResponseWriter, body any) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 func ready(w http.ResponseWriter) {
-	respond(w, map[string]any{"protocol": 1, "state": "ready", "routing_enforcement": "enabled"})
+	respond(w, map[string]any{"protocol": 1, "state": "ready", "routing_enforcement": "enabled", "absolute_queue_deadline": true})
 }
 func queued(w http.ResponseWriter, id string, deadline time.Time) {
 	respond(w, map[string]any{"protocol": 1, "ticket": map[string]any{"id": id, "deadline_ms": deadline.UnixMilli()}})
@@ -335,12 +335,13 @@ func TestOwnedRustControlProtocol(t *testing.T) {
 		} `json:"ticket"`
 	}
 	input := struct {
-		Protocol int     `json:"protocol"`
-		Request  Request `json:"request"`
-		Cost     int     `json:"cost"`
-		Weight   int     `json:"weight"`
-		WaitMS   int     `json:"wait_ms"`
-	}{1, r, 1, 1, 1000}
+		Protocol   int     `json:"protocol"`
+		Request    Request `json:"request"`
+		Cost       int     `json:"cost"`
+		Weight     int     `json:"weight"`
+		WaitMS     int     `json:"wait_ms"`
+		DeadlineMS int64   `json:"deadline_ms"`
+	}{1, r, 1, 1000, 1000, time.Now().Add(time.Second).UnixMilli()}
 	if err = client.call(ctx, "enqueue", input, &enqueued); err != nil {
 		t.Fatal(err)
 	}
@@ -349,8 +350,16 @@ func TestOwnedRustControlProtocol(t *testing.T) {
 		defer done()
 		_, _ = client.cancel(cleanup, r)
 	}()
-	if enqueued.Protocol != 1 || enqueued.Ticket.ID != r.ID || enqueued.Ticket.DeadlineMS <= time.Now().UnixMilli() {
+	if enqueued.Protocol != 1 || enqueued.Ticket.ID != r.ID || enqueued.Ticket.DeadlineMS != input.DeadlineMS {
 		t.Fatalf("Rust enqueue contract: %+v", enqueued)
+	}
+	time.Sleep(25 * time.Millisecond)
+	if err = client.call(ctx, "enqueue", input, &enqueued); err != nil || enqueued.Ticket.DeadlineMS != input.DeadlineMS {
+		t.Fatalf("Rust original deadline replay: %v", err)
+	}
+	input.DeadlineMS++
+	if err = client.call(ctx, "enqueue", input, &enqueued); !errors.Is(err, ErrRejected) {
+		t.Fatalf("Rust allowed deadline change on same call ID: %v", err)
 	}
 	var polled struct {
 		Protocol int `json:"protocol"`
@@ -556,7 +565,29 @@ func TestOwnedRustInferenceProtocol(t *testing.T) {
 	defer client.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ticket := &Ticket{client: client, request: request, Lease: Lease{ID: request.ID, State: "prepared"}}
+	// The owned Rust fixture already reserves the exact body. Bind its same ID
+	// to an absolute queue deadline before using the real Unix inference path;
+	// this private probe does not enable the production-wide activation fence.
+	deadline := time.Now().Add(2 * time.Second).UnixMilli()
+	var queuedReply struct {
+		Ticket struct {
+			ID         string `json:"id"`
+			DeadlineMS int64  `json:"deadline_ms"`
+		} `json:"ticket"`
+	}
+	if err = client.call(ctx, "enqueue", map[string]any{"protocol": 1, "request": request, "cost": 1, "weight": 1000, "wait_ms": 2000, "deadline_ms": deadline}, &queuedReply); err != nil || queuedReply.Ticket.ID != request.ID || queuedReply.Ticket.DeadlineMS != deadline {
+		t.Fatalf("owned inference original deadline: %v", err)
+	}
+	var prepared struct {
+		Decision struct {
+			Status string `json:"status"`
+			Lease  Lease  `json:"lease"`
+		} `json:"decision"`
+	}
+	if err = client.call(ctx, "poll", map[string]any{"protocol": 1, "request": request}, &prepared); err != nil || prepared.Decision.Status != "granted" || prepared.Decision.Lease.State != "prepared" {
+		t.Fatalf("owned inference queue grant: %v", err)
+	}
+	ticket := &Ticket{client: client, request: request, Lease: prepared.Decision.Lease, Deadline: time.UnixMilli(deadline)}
 	if _, err = ticket.Forward(ctx, Responses, body); !errors.Is(err, ErrRejected) {
 		t.Fatal("Chat ticket accepted for Responses")
 	}
@@ -572,7 +603,7 @@ func TestOwnedRustInferenceProtocol(t *testing.T) {
 	if _, err = ticket.Forward(ctx, Chat, body); !errors.Is(err, ErrRejected) {
 		t.Fatal("Go replayed ticket")
 	}
-	t.Log("owned_rust_inference_protocol_passed=true; synthetic_http_dispatch=true; production_enforcement=false")
+	t.Log("owned_rust_inference_protocol_passed=true; synthetic_http_dispatch=true; absolute_deadline_preserved=true; production_enforcement=false")
 }
 
 func nativeGrantContext(vk, user string, providers []schemas.ProviderPermit) *schemas.BifrostContext {
@@ -1090,4 +1121,118 @@ func TestGatewayRuntimeRetainsOriginalQueueDeadlineWithoutDispatch(t *testing.T)
 			t.Fatal("queued proof gained a fresh deadline, dispatch or misleading authentication status")
 		}
 	})(ctx)
+}
+
+func TestAbsoluteAdmissionDeadlineSurvivesHealthAndPreservesOriginalWeight(t *testing.T) {
+	original := fixtureRequest()
+	deadline := time.UnixMilli(time.Now().Add(time.Second).UnixMilli())
+	var queuedAt atomic.Int64
+	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/health":
+			time.Sleep(75 * time.Millisecond)
+			ready(w)
+		case "/v1/enqueue":
+			var in struct {
+				Request    Request `json:"request"`
+				Weight     uint32  `json:"weight"`
+				DeadlineMS int64   `json:"deadline_ms"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				t.Error(err)
+			}
+			if in.Request.ID != original.ID || in.Request.Owner != original.Owner || in.Weight != 1000 || in.DeadlineMS != deadline.UnixMilli() {
+				t.Error("original identity, signed weight or deadline changed")
+			}
+			queuedAt.Store(time.Now().UnixMilli())
+			queued(w, original.ID, deadline)
+		case "/v1/poll":
+			respond(w, map[string]any{"protocol": 1, "decision": map[string]any{"status": "granted", "lease": Lease{ID: original.ID, Pool: "qwen", Engine: "q2", State: "prepared"}}})
+		case "/v1/cancel":
+			cancellation(w)
+		default:
+			t.Error("unexpected request")
+			w.WriteHeader(500)
+		}
+	})
+	ticket, err := client.AcquireUntil(context.Background(), original, 12, 1000, deadline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ticket.Deadline.Equal(deadline) || deadline.UnixMilli()-queuedAt.Load() > 950 {
+		t.Fatal("health wait was not charged to the same original budget")
+	}
+	if _, err = ticket.Cancel(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAbsoluteAdmissionRejectsEvenOneMillisecondExtension(t *testing.T) {
+	original := fixtureRequest()
+	deadline := time.Now().Add(time.Second)
+	var polls, cancels atomic.Int32
+	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/health":
+			ready(w)
+		case "/v1/enqueue":
+			queued(w, original.ID, deadline.Add(time.Millisecond))
+		case "/v1/poll":
+			polls.Add(1)
+			w.WriteHeader(500)
+		case "/v1/cancel":
+			cancels.Add(1)
+			cancellation(w)
+		}
+	})
+	_, err := client.AcquireUntil(context.Background(), original, 1, 1, deadline)
+	if !errors.Is(err, ErrUnavailable) || polls.Load() != 0 || cancels.Load() != 1 {
+		t.Fatalf("extended queue accepted or owner lost: %v polls=%d cancel=%d", err, polls.Load(), cancels.Load())
+	}
+}
+
+func TestAbsoluteAdmissionRefusesLegacyControllerBeforeEnqueue(t *testing.T) {
+	var mutations atomic.Int32
+	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/health" {
+			mutations.Add(1)
+			w.WriteHeader(500)
+			return
+		}
+		respond(w, map[string]any{"protocol": 1, "state": "ready", "routing_enforcement": "enabled"})
+	})
+	_, err := client.AcquireUntil(context.Background(), fixtureRequest(), 1, 1, time.Now().Add(time.Second))
+	if !errors.Is(err, ErrNotEnforced) || mutations.Load() != 0 {
+		t.Fatal("legacy controller created a resettable queue")
+	}
+}
+
+func TestExpiredAbsoluteAdmissionHasNoIO(t *testing.T) {
+	var calls atomic.Int32
+	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) { calls.Add(1); w.WriteHeader(500) })
+	_, err := client.AcquireUntil(context.Background(), fixtureRequest(), 1, 1, time.Now().Add(-time.Millisecond))
+	if !errors.Is(err, ErrExpired) || calls.Load() != 0 {
+		t.Fatal("expired ingress budget made control I/O")
+	}
+}
+
+func TestPreparedTicketCannotStartAfterItsOriginalDeadline(t *testing.T) {
+	r := fixtureRequest()
+	body := []byte(`{"model":"qwen","messages":[]}`)
+	r.BodyHash, _ = RequestDigest(Chat, body)
+	var data, cancels atomic.Int32
+	client := fixtureClient(t, func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/v1/cancel" {
+			cancels.Add(1)
+			cancellation(w)
+			return
+		}
+		data.Add(1)
+		w.WriteHeader(500)
+	})
+	ticket := &Ticket{Lease: Lease{ID: r.ID, State: "prepared"}, Deadline: time.Now().Add(-time.Millisecond), client: client, request: r}
+	_, err := ticket.Forward(context.Background(), Chat, body)
+	if !errors.Is(err, ErrExpired) || data.Load() != 0 || cancels.Load() != 1 {
+		t.Fatalf("expired ticket attempted inference or lost cleanup: %v data=%d cancel=%d", err, data.Load(), cancels.Load())
+	}
 }

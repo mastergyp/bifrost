@@ -149,6 +149,15 @@ func (t *Ticket) Forward(ctx context.Context, api API, body []byte) (*ForwardRes
 	if err != nil || digest != t.request.BodyHash || !validRequest(t.request) || t.Lease.ID != t.request.ID {
 		return nil, ErrRejected
 	}
+	if !t.Deadline.IsZero() && !time.Now().Before(t.Deadline) {
+		if t.forwarded.Load() {
+			return nil, ErrRejected
+		}
+		cleanup, done := context.WithTimeout(context.Background(), time.Second)
+		defer done()
+		_, _ = t.Cancel(cleanup) // never certifies completion of dispatched work
+		return nil, ErrExpired
+	}
 	if !t.forwarded.CompareAndSwap(false, true) {
 		return nil, ErrRejected
 	}
@@ -293,8 +302,24 @@ func validRequest(r Request) bool {
 // Until an actual dispatcher is qualified, the server's not_enabled fence
 // deliberately refuses activation, including the current Rust implementation.
 func (c *Client) Acquire(ctx context.Context, r Request, cost uint64, weight uint32, remaining time.Duration) (ticket *Ticket, err error) {
-	if !validRequest(r) || cost == 0 || weight < 1 || weight > 100 || remaining < time.Millisecond || remaining > 60*time.Second {
+	if remaining < time.Millisecond || remaining > 60*time.Second {
 		return nil, ErrRejected
+	}
+	return c.AcquireUntil(ctx, r, cost, weight, time.Now().Add(remaining))
+}
+
+// AcquireUntil carries the immutable ingress deadline through health, transport
+// and store waits. A relative wait calculated in another process is insufficient:
+// adding it to the controller's later clock would extend the original budget.
+// IDs/owner and weight remain adapter-owned; verified Gateway CallID is the ID,
+// never a newly generated identity on replay. Legacy controllers fail closed.
+func (c *Client) AcquireUntil(ctx context.Context, r Request, cost uint64, weight uint32, deadline time.Time) (ticket *Ticket, err error) {
+	if !validRequest(r) || cost == 0 || cost > 1_000_000_000_000 || weight < 1 || weight > 1000 || deadline.IsZero() || deadline.After(time.Now().Add(60*time.Second)) {
+		return nil, ErrRejected
+	}
+	localDeadline := time.UnixMilli(deadline.UnixMilli())
+	if !time.Now().Before(localDeadline) {
+		return nil, ErrExpired
 	}
 	// Freeze slices/pointers so caller reuse cannot mutate a live operation.
 	r.EligiblePools = append([]string{}, r.EligiblePools...)
@@ -303,18 +328,18 @@ func (c *Client) Acquire(ctx context.Context, r Request, cost uint64, weight uin
 		s := *r.SessionHash
 		r.SessionHash = &s
 	}
-	localDeadline := time.Now().Add(remaining)
 	ctx, cancel := context.WithDeadline(ctx, localDeadline)
 	defer cancel()
 	var health struct {
-		Protocol    int    `json:"protocol"`
-		State       string `json:"state"`
-		Enforcement string `json:"routing_enforcement"`
+		Protocol         int    `json:"protocol"`
+		State            string `json:"state"`
+		Enforcement      string `json:"routing_enforcement"`
+		AbsoluteDeadline bool   `json:"absolute_queue_deadline"`
 	}
 	if err = c.call(ctx, "health", nil, &health); err != nil {
 		return nil, err
 	}
-	if health.Protocol != 1 || health.State != "ready" || health.Enforcement != "enabled" {
+	if health.Protocol != 1 || health.State != "ready" || health.Enforcement != "enabled" || !health.AbsoluteDeadline {
 		return nil, ErrNotEnforced
 	}
 	// Even an ambiguous enqueue is cancelled with the original owner. This is a
@@ -333,23 +358,27 @@ func (c *Client) Acquire(ctx context.Context, r Request, cost uint64, weight uin
 			DeadlineMS int64  `json:"deadline_ms"`
 		} `json:"ticket"`
 	}
+	if !time.Now().Before(localDeadline) {
+		return nil, ErrExpired
+	}
 	err = c.call(ctx, "enqueue", struct {
-		Protocol int     `json:"protocol"`
-		Request  Request `json:"request"`
-		Cost     uint64  `json:"cost"`
-		Weight   uint32  `json:"weight"`
-		WaitMS   int64   `json:"wait_ms"`
-	}{1, r, cost, weight, time.Until(localDeadline).Milliseconds()}, &queued)
+		Protocol   int     `json:"protocol"`
+		Request    Request `json:"request"`
+		Cost       uint64  `json:"cost"`
+		Weight     uint32  `json:"weight"`
+		WaitMS     int64   `json:"wait_ms"`
+		DeadlineMS int64   `json:"deadline_ms"`
+	}{1, r, cost, weight, max(1, time.Until(localDeadline).Milliseconds()), localDeadline.UnixMilli()}, &queued)
 	if err != nil {
 		return nil, err
 	}
-	deadline := time.UnixMilli(queued.Ticket.DeadlineMS)
-	if queued.Protocol != 1 || queued.Ticket.ID != r.ID || queued.Ticket.DeadlineMS <= 0 || deadline.After(localDeadline.Add(time.Second)) {
+	controllerDeadline := time.UnixMilli(queued.Ticket.DeadlineMS)
+	if queued.Protocol != 1 || queued.Ticket.ID != r.ID || queued.Ticket.DeadlineMS <= 0 || controllerDeadline.After(localDeadline) {
 		return nil, ErrUnavailable
 	}
-	if deadline.Before(localDeadline) {
+	if controllerDeadline.Before(localDeadline) {
 		var done context.CancelFunc
-		ctx, done = context.WithDeadline(ctx, deadline)
+		ctx, done = context.WithDeadline(ctx, controllerDeadline)
 		defer done()
 	}
 	for {
@@ -374,11 +403,14 @@ func (c *Client) Acquire(ctx context.Context, r Request, cost uint64, weight uin
 		}
 		switch polled.Decision.Status {
 		case "granted":
+			if !time.Now().Before(controllerDeadline) {
+				return nil, ErrExpired
+			}
 			l := polled.Decision.Lease
 			if l.ID != r.ID || l.State != "prepared" || !contains(r.EligiblePools, l.Pool) || !contains(r.HealthyEngines, l.Engine) {
 				return nil, ErrUnavailable
 			}
-			return &Ticket{Lease: l, Deadline: deadline, client: c, request: r}, nil
+			return &Ticket{Lease: l, Deadline: controllerDeadline, client: c, request: r}, nil
 		case "busy":
 		case "queue_expired":
 			return nil, ErrExpired
