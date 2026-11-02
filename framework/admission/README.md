@@ -375,3 +375,49 @@ existing routing compatibility (do not silently disable it); combined real
 Gateway frontend; common images, cache receipts, abort/crash financial recovery,
 fixed Linux release and rollback. Do not substitute disabled existing features
 for the requested preserved behavior. Production remains unchanged.
+
+## Native original-model binding before routing (isolated qualification)
+
+Bifrost source `7976a9a8d66bd6dfd708ac42ce989bde2b6e6d7f` captures bounded
+original native model/controls/deadline before core `PreRequestHook` and session
+routing. HTTP takes its authoritative snapshot before transport hooks; SDK
+calls take it before core hooks. Rewrites retain the original `Principal.Source`
+and `OriginalRoute`, while `RoutedTarget` reports the separately authorized
+post-hook target. Original logical-model access, canonical source access and
+actual-target access must all pass the existing Grant. Original managed intent
+cannot escape to an unowned provider. No new Grant, keys or financial counters
+are substituted; a preparation policy must still enforce the original source's
+quality/capability contract and the controller's fixed graph.
+
+`NewRuntime` accepts optional immutable `NativeModelAlias` bindings. Register
+logical aliases explicitly instead of treating a hook's target as the user's
+source. Ambiguous providerless names fail closed, malformed/oversized names
+are not retained in context, and nil-context SDK calls do not place per-caller
+metadata on the shared core context. The deployed read-only observation found
+one enabled rule, `gpu0-qwen36-thinking-alias`, translating the Qwen thinking
+name to the same canonical Qwen backend, without key pins or fallbacks. Its
+production equivalent needs an explicit binding to the correct thinking source
+contract; do not disable this rule to qualify the new runtime.
+
+Red/green includes original native HTTP source/target authorization and four
+SDK Chat/Responses unary/streaming failures with old core hook invocation
+(overlaid only `core/bifrost.go`, not a clean old checkout). New code passes
+67 admission race events/3 ordinary owned skips, 47 HTTP/SDK events/1 ordinary
+owned skip, 9 managed-core events, and vet. Eight new native alias HTTP/SDK
+shapes retain the original logical model and nonzero money/token/request
+accounting once; these alias streams complete normally. Separately, fixed
+Gateway `619db4cda0b54efcda1dde32ad7d45b9cf4f4fdf` with this Bifrost source
+passes the real Rust controller/sender fixture's eight canonical native/signed
+unary/cancelled-SSE cases, original121 PG/Redis tests, capacity100 and all four
+explicit owned Go probes; active0/schema cleanup/two containers removed. The
+independent real Gateway HTTP two-row proof is still a different request from
+the Bifrost HTTP/physical proof.
+
+[Summary](evidence/native-source-binding-20261102.json),
+[fixed-source owned receipt](evidence/native-source-binding-owned-20261102.json).
+Public paid harness remains unavailable for this embedded profile (no standalone
+CLI runtime-registration path); actual HTTP fixtures cover it without paid
+provider calls. No production activation or model/client/key changes. The
+remaining release work listed above still applies, except native original
+logical-model binding is now implemented and isolated-tested. Existing native
+TCP pool stress failure is retained and was not rerun or declared solved here.
