@@ -167,7 +167,11 @@ func exerciseConcreteCall(t *testing.T, control *admission.Client, pool string, 
 		body["max_output_tokens"] = 17
 	}
 	if caseName != "" {
-		body["case"] = caseName
+		if api == string(admission.Chat) {
+			body["messages"] = []any{map[string]any{"role": "user", "content": caseName}}
+		} else {
+			body["input"] = caseName
+		}
 	}
 	raw, _ := json.Marshal(body)
 	path := "/openai" + api
