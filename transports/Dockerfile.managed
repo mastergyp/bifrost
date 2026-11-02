@@ -1,0 +1,55 @@
+# Pinned v2.2.4 runtime, same original runtime metadata/data contract.
+# Build only the affected admission tests; do not repeat all providers.
+FROM node:25-alpine3.23@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS ui-builder
+WORKDIR /app
+COPY ui/package*.json ./
+RUN npm ci
+COPY ui/ ./
+RUN npm run build-enterprise
+
+FROM golang:1.27.0-alpine3.24@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS builder
+ARG APK_MIRROR=https://dl-cdn.alpinelinux.org/alpine
+RUN case "$APK_MIRROR" in \
+      https://dl-cdn.alpinelinux.org/alpine|https://mirrors.cloud.tencent.com/alpine) ;; \
+      *) echo 'unsupported APK mirror' >&2; exit 2 ;; \
+    esac && \
+    sed -i "s|https://dl-cdn.alpinelinux.org/alpine|${APK_MIRROR}|g" /etc/apk/repositories && \
+    apk add --no-cache gcc musl-dev sqlite-dev binutils binutils-gold
+WORKDIR /build
+ENV CGO_ENABLED=1 GOOS=linux
+ARG GOPROXY=https://proxy.golang.org,direct
+COPY core/ ./core/
+COPY framework/ ./framework/
+COPY plugins/ ./plugins/
+COPY transports/ ./transports/
+RUN go work init && go work use ./core ./framework ./transports && \
+    for plugin_dir in ./plugins/*/; do \
+      if [ -f "$plugin_dir/go.mod" ]; then go work use "$plugin_dir" || exit 1; fi; \
+    done
+# No cloud credentials, production data, model mounts or runtime configuration.
+RUN cd core && go mod download all
+# Incremental managed-routing release: relevant local protocol regressions,
+# no provider-wide/GPU/paid API suite. Full historic qualification is retained.
+RUN --network=none cd framework && go test -p 2 ./admission
+COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
+ARG SOURCE_REVISION
+RUN test -n "$SOURCE_REVISION" && cd transports && \
+    go build -p 2 -ldflags="-w -s -X main.Version=v2.2.4-sw-managed-${SOURCE_REVISION} -extldflags '-static'" \
+    -trimpath -tags sqlite_static -o /app/main ./bifrost-http
+
+# Optional Linux/cross-UID qualification artifact. The ordinary release build
+# does not execute or include this probe; it has no real users or credentials.
+FROM builder AS qualification-builder
+COPY tests/managedadmission/ ./tests/managedadmission/
+RUN --network=none cd tests/managedadmission && GOWORK=off go test -p 2 -c -tags sqlite_static -o /app/profile-probe.test .
+FROM docker.io/maximhq/bifrost@sha256:74826952fd6f1fc32f7bf8c364c41e27d996d0d03e4157ca8b55ddadaacb0668 AS profile-probe
+COPY --from=qualification-builder /app/profile-probe.test /app/profile-probe.test
+ENTRYPOINT ["/app/profile-probe.test"]
+
+# Preserve the deployed runtime's entrypoint, user, environment, CA bundle,
+# healthcheck and all other files. In particular, no /app/data is copied in.
+FROM docker.io/maximhq/bifrost@sha256:74826952fd6f1fc32f7bf8c364c41e27d996d0d03e4157ca8b55ddadaacb0668
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.source="https://github.com/mastergyp/bifrost" \
+      org.opencontainers.image.revision="$SOURCE_REVISION"
+COPY --from=builder /app/main /app/main
