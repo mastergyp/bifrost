@@ -226,8 +226,8 @@ func TestOwnedConfiguredProfileHTTPServerForGateway(t *testing.T) {
 	cost := func(target string) float64 {
 		return f.catalog.CalculateCost(&schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{Model: target, Usage: &schemas.BifrostLLMUsage{PromptTokens: 5, CompletionTokens: 2, TotalTokens: 7}, ExtraFields: schemas.BifrostResponseExtraFields{RequestType: schemas.ChatCompletionRequest, Provider: schemas.OpenAI, OriginalModelRequested: model, ResolvedModelUsed: target}}}, nil)
 	}
-	expected := 3*cost(model) + 3*cost("gpt-4.1")
-	if expected <= 0 || data.RateLimits["original-rate"].TokenCurrentUsage != 79 || data.RateLimits["original-rate"].RequestCurrentUsage != 10 || math.Abs(data.Budgets["original-budget"].CurrentUsage-(13.25+expected)) > 1e-9 {
+	expected := 5*cost(model) + 3*cost("gpt-4.1")
+	if expected <= 0 || data.RateLimits["original-rate"].TokenCurrentUsage != 93 || data.RateLimits["original-rate"].RequestCurrentUsage != 12 || math.Abs(data.Budgets["original-budget"].CurrentUsage-(13.25+expected)) > 1e-9 {
 		t.Fatal("original governance lost actual Gateway/auxiliary target usage")
 	}
 	if f.account.keys.Load() != 0 {
@@ -236,10 +236,10 @@ func TestOwnedConfiguredProfileHTTPServerForGateway(t *testing.T) {
 	mu.Lock()
 	captured := append([]map[string]any{}, claims...)
 	mu.Unlock()
-	if len(captured) != 6 {
-		t.Fatalf("expected 6 actual calls, got %d", len(captured))
+	if len(captured) != 8 {
+		t.Fatalf("expected 8 actual calls, got %d", len(captured))
 	}
-	evidence := map[string]any{"passed": true, "actual_gateway_model_calls": 6, "original_governance_tokens_delta": 42, "original_governance_requests_delta": 6, "original_governance_budget_delta": expected, "captured_claims": captured}
+	evidence := map[string]any{"passed": true, "actual_gateway_model_calls": 8, "original_governance_tokens_delta": 56, "original_governance_requests_delta": 8, "original_governance_budget_delta": expected, "captured_claims": captured}
 	raw, _ := json.MarshalIndent(evidence, "", "  ")
 	if err := os.WriteFile(os.Getenv("SW_PROFILE_GATEWAY_EVIDENCE"), raw, 0600); err != nil {
 		t.Fatal(err)
