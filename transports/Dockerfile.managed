@@ -7,7 +7,7 @@ RUN npm ci
 COPY ui/ ./
 RUN npm run build-enterprise
 
-FROM golang:1.27.0-alpine3.24@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS builder
+FROM golang:1.27.0-alpine3.24@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS build-dependencies
 ARG APK_MIRROR=https://dl-cdn.alpinelinux.org/alpine
 RUN case "$APK_MIRROR" in \
       https://dl-cdn.alpinelinux.org/alpine|https://mirrors.cloud.tencent.com/alpine) ;; \
@@ -31,6 +31,7 @@ RUN cd core && go mod download all
 # Incremental managed-routing release: relevant local protocol regressions,
 # no provider-wide/GPU/paid API suite. Full historic qualification is retained.
 RUN --network=none cd framework && go test -p 2 ./admission
+FROM build-dependencies AS builder
 COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
 ARG SOURCE_REVISION
 RUN test -n "$SOURCE_REVISION" && cd transports && \
@@ -39,8 +40,9 @@ RUN test -n "$SOURCE_REVISION" && cd transports && \
 
 # Optional Linux/cross-UID qualification artifact. The ordinary release build
 # does not execute or include this probe; it has no real users or credentials.
-FROM builder AS qualification-builder
+FROM build-dependencies AS qualification-builder
 COPY tests/managedadmission/ ./tests/managedadmission/
+RUN cd tests/managedadmission && GOWORK=off go mod download all
 RUN --network=none cd tests/managedadmission && GOWORK=off go test -p 2 -c -tags sqlite_static -o /app/profile-probe.test .
 FROM docker.io/maximhq/bifrost@sha256:74826952fd6f1fc32f7bf8c364c41e27d996d0d03e4157ca8b55ddadaacb0668 AS profile-probe
 COPY --from=qualification-builder /app/profile-probe.test /app/profile-probe.test
