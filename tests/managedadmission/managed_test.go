@@ -128,6 +128,10 @@ type fixture struct {
 }
 
 func newFixture(t *testing.T, delegated bool, withRuntime ...bool) *fixture {
+	useRuntime := len(withRuntime) > 0 && withRuntime[0]
+	return fixtureWithInner(t, delegated, useRuntime, nil, "home")
+}
+func fixtureWithInner(t *testing.T, delegated, useRuntime bool, inner schemas.ManagedInference, pool string) *fixture {
 	t.Helper()
 	logger := bifrost.NewNoOpLogger()
 	now := time.Now().UTC()
@@ -163,13 +167,16 @@ func newFixture(t *testing.T, delegated bool, withRuntime ...bool) *fixture {
 	a := &account{}
 	var boundary schemas.ManagedInference = manager
 	var runtime *admission.Runtime
-	if len(withRuntime) > 0 && withRuntime[0] {
+	if inner != nil {
+		boundary = inner
+	}
+	if useRuntime {
 		native, _ := admission.NewNativeAuthorizer([]byte(strings.Repeat("s", 32)), nil)
 		verifier, e := admission.NewDelegationVerifier([]admission.DelegationKey{{ID: "owned-key-1", Secret: bytes.Repeat([]byte{11}, 32), GatewayVirtualKeyIDs: []string{vkID}}})
 		if e != nil {
 			t.Fatal(e)
 		}
-		runtime, e = admission.NewRuntime(manager, native, verifier, []admission.RuntimeModel{{Alias: "qwen", ModelTarget: admission.ModelTarget{Pool: "home", Provider: schemas.OpenAI, Model: model}}}, []string{vkID})
+		runtime, e = admission.NewRuntime(boundary, native, verifier, []admission.RuntimeModel{{Alias: "qwen", ModelTarget: admission.ModelTarget{Pool: pool, Provider: schemas.OpenAI, Model: model}}}, []string{vkID})
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -339,7 +346,7 @@ func ownedHTTPToken(api string, body []byte) string {
 	var wire map[string]json.RawMessage
 	_ = json.Unmarshal(body, &wire)
 	controls := map[string]json.RawMessage{}
-	for _, name := range []string{"max_tokens", "max_output_tokens", "temperature", "reasoning_effort"} {
+	for _, name := range []string{"max_tokens", "max_completion_tokens", "max_output_tokens", "temperature", "reasoning_effort"} {
 		if value, ok := wire[name]; ok {
 			controls[name] = value
 		}

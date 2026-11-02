@@ -69,8 +69,9 @@ func (t *Ticket) Cancel(ctx context.Context) (bool, error) {
 }
 
 type Client struct {
-	http *http.Client
-	data *http.Client
+	socket string
+	http   *http.Client
+	data   *http.Client
 }
 
 // New uses only the literal local socket; ambient proxies, caller URLs and
@@ -93,8 +94,9 @@ func New(socket string) (*Client, error) {
 	dataTransport.MaxResponseHeaderBytes = 32768
 	redirect := func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
 	return &Client{
-		http: &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: redirect},
-		data: &http.Client{Transport: dataTransport, CheckRedirect: redirect},
+		socket: socket,
+		http:   &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: redirect},
+		data:   &http.Client{Transport: dataTransport, CheckRedirect: redirect},
 	}, nil
 }
 func (c *Client) Close() {

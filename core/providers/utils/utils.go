@@ -2925,6 +2925,11 @@ func BuildClientStreamChunk(ctx context.Context, processedResponse *schemas.Bifr
 	dropResp, _ := ctx.Value(schemas.BifrostContextKeyDropRawResponseFromClient).(bool)
 	drop := dropReq || dropResp
 	streamResponse := &schemas.BifrostStreamChunk{}
+	if enabled, _ := ctx.Value(managedWireAccountingKey{}).(bool); enabled {
+		if final, _ := ctx.Value(schemas.BifrostContextKeyStreamEndIndicator).(bool); final {
+			streamResponse.FinalForAccounting = true
+		}
+	}
 	if processedResponse != nil {
 		streamResponse.BifrostTextCompletionResponse = processedResponse.TextCompletionResponse
 		streamResponse.BifrostChatResponse = processedResponse.ChatResponse

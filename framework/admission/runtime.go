@@ -19,6 +19,7 @@ const (
 	gatewayProofKey provenanceKey = iota
 	nativeSessionKey
 	principalKey
+	nativeBudgetKey
 )
 
 // RuntimeModel is immutable deployment input. Provider/model is explicit so
@@ -36,9 +37,18 @@ type gatewayEnvelope struct {
 // Principal is a small admitted handle, not request/stream storage. Only this
 // boundary constructs it, after existing governance resolved the original Grant.
 type Principal struct {
-	authorization NativeAuthorization
-	session       *string
-	delegation    *VerifiedDelegation
+	authorization   NativeAuthorization
+	session         *string
+	delegation      *VerifiedDelegation
+	source          RuntimeModel
+	deadline        time.Time
+	controls        map[string]json.RawMessage
+	controlsInvalid bool
+}
+type nativeBudget struct {
+	deadline time.Time
+	controls map[string]json.RawMessage
+	invalid  bool
 }
 
 func (p *Principal) Authorization() NativeAuthorization {
@@ -55,6 +65,18 @@ func (p *Principal) SessionHash() *string {
 	}
 	s := *p.session
 	return &s
+}
+func (p *Principal) Source() RuntimeModel {
+	if p == nil {
+		return RuntimeModel{}
+	}
+	return p.source
+}
+func (p *Principal) QueueDeadline() time.Time {
+	if p == nil {
+		return time.Time{}
+	}
+	return p.deadline
 }
 func (p *Principal) Delegation() *VerifiedDelegation {
 	if p == nil {
@@ -225,7 +247,16 @@ func (r *Runtime) handleAt(ctx *schemas.BifrostContext, req *schemas.BifrostRequ
 	if err != nil || len(auth.Pools) == 0 {
 		return provenanceError(403)
 	}
-	ctx.SetValue(principalKey, &Principal{authorization: auth, session: session, delegation: proof})
+	p := &Principal{authorization: auth, session: session, delegation: proof, source: *source, deadline: now.Add(60 * time.Second)}
+	if proof != nil {
+		p.deadline = proof.QueueDeadline()
+		_ = json.Unmarshal(proof.OriginalControls(), &p.controls)
+	} else if budget, ok := ctx.Value(nativeBudgetKey).(*nativeBudget); ok && budget != nil {
+		p.deadline = budget.deadline
+		p.controls = budget.controls
+		p.controlsInvalid = budget.invalid
+	}
+	ctx.SetValue(principalKey, p)
 	return r.inner.Handle(ctx, req)
 }
 
@@ -252,6 +283,16 @@ func (r *Runtime) WrapHTTP(next fasthttp.RequestHandler) fasthttp.RequestHandler
 				return
 			}
 			if r != nil && ctx.IsPost() && (strings.HasSuffix(path, "/chat/completions") || strings.HasSuffix(path, "/responses")) {
+				budget := &nativeBudget{deadline: time.Now().Add(60 * time.Second)}
+				if len(ctx.PostBody()) <= maxInferenceBytes {
+					var err error
+					budget.controls, err = extractControls(ctx.PostBody())
+					budget.invalid = err != nil
+				} else {
+					budget.invalid = true
+				}
+				ctx.SetUserValue(nativeBudgetKey, budget)
+				defer ctx.RemoveUserValue(nativeBudgetKey)
 				for _, name := range []string{"x-session-id", "x-conversation-id"} {
 					sessions := ctx.Request.Header.PeekAll(name)
 					if len(sessions) == 0 {
