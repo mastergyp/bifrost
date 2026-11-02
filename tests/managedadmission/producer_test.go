@@ -236,6 +236,9 @@ func TestOwnedRustBifrostProducerProtocol(t *testing.T) {
 			}
 		}
 	}
+	if t.Failed() {
+		return
+	}
 	t.Log("owned_bifrost_rust_producer_passed=true; actual_canonical_http_cases=8; original_accounting_preserved=true")
 }
 

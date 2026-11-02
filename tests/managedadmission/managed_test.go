@@ -14,6 +14,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -135,7 +136,11 @@ func fixtureWithInner(t *testing.T, delegated, useRuntime bool, inner schemas.Ma
 	t.Helper()
 	logger := bifrost.NewNoOpLogger()
 	now := time.Now().UTC()
-	pricing, err := filepath.Abs("../../framework/modelcatalog/datasheet/testdata/pricing.json")
+	pricingPath := os.Getenv("SW_BIFROST_OWNED_PRICING_FILE")
+	if pricingPath == "" {
+		pricingPath = "../../framework/modelcatalog/datasheet/testdata/pricing.json"
+	}
+	pricing, err := filepath.Abs(pricingPath)
 	if err != nil {
 		t.Fatal(err)
 	}
