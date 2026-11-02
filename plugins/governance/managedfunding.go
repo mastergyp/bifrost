@@ -35,6 +35,20 @@ type ManagedFunding struct {
 func (*ManagedFunding) String() string     { return "managed target funding (redacted)" }
 func (f *ManagedFunding) GoString() string { return f.String() }
 
+func (f *ManagedFunding) Target() schemas.Route {
+	if f == nil {
+		return schemas.Route{}
+	}
+	return f.target
+}
+
+func (f *ManagedFunding) RequestType() schemas.RequestType {
+	if f == nil {
+		return ""
+	}
+	return f.requestType
+}
+
 func managedFundingError(status int, message string) *schemas.BifrostError {
 	return &schemas.BifrostError{StatusCode: &status, IsBifrostError: true, AllowFallbacks: new(false), Error: &schemas.ErrorField{Message: message}}
 }

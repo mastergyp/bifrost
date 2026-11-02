@@ -49,7 +49,21 @@ type PreparationPolicy interface {
 // and validate fresh target authority; it must not execute inference or wait
 // for a nested physical reservation while holding this prepared ticket.
 type SelectedTargetPolicy interface {
-	AuthorizeSelected(*schemas.BifrostContext, *Principal, Lease, schemas.RequestType) (ModelTarget, *schemas.BifrostError)
+	AuthorizeSelected(*schemas.BifrostContext, *Principal, Lease, schemas.RequestType) (Selection, *schemas.BifrostError)
+}
+
+// SelectedFunding is an opaque approval issued by the original governance
+// owner. Producer verifies its exact target and binds it before any data I/O;
+// a preparation policy cannot accidentally approve one target and bill another.
+type SelectedFunding interface {
+	Target() schemas.Route
+	RequestType() schemas.RequestType
+	Bind(*schemas.BifrostContext) *schemas.BifrostError
+}
+
+type Selection struct {
+	Target  ModelTarget
+	Funding SelectedFunding
 }
 
 // Producer uses the existing OpenAI converters, serializers and SSE decoders.
@@ -336,7 +350,7 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 			_, _ = ticket.Cancel(cleanup)
 			return nil, producerError(408, "managed caller left before dispatch").Error
 		}
-		target, refusal := p.selected.AuthorizeSelected(ctx, principal, ticket.Lease, r.RequestType)
+		selection, refusal := p.selected.AuthorizeSelected(ctx, principal, ticket.Lease, r.RequestType)
 		if refusal != nil {
 			copy := *refusal
 			copy.AllowFallbacks = new(false)
@@ -345,12 +359,28 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 		if planningEnded() {
 			return nil, producerError(408, "managed selected-target validation deadline exceeded").Error
 		}
+		target := selection.Target
 		if !validTarget(target) || target.Pool != ticket.Lease.Pool || !p.Owns(target.Provider) ||
 			ctx.Grant() == nil || ctx.Grant().Access() == nil || !ctx.Grant().Access().IsModelAllowed(string(target.Provider), target.Model) {
 			return nil, producerError(403, "selected target no longer matches original authority").Error
 		}
 		if _, restricted := ctx.Grant().Access().KeysForModel(string(target.Provider), target.Model); restricted {
 			return nil, producerError(403, "keyless managed target exceeds provider-key scope").Error
+		}
+		if selection.Funding == nil {
+			return nil, producerError(503, "selected managed target funding is missing").Error
+		}
+		approved := selection.Funding.Target()
+		if approved.Provider != target.Provider || approved.Model != target.Model || approved.KeyID != "" || selection.Funding.RequestType() != r.RequestType {
+			return nil, producerError(403, "selected target does not match its funding approval").Error
+		}
+		if denied := selection.Funding.Bind(ctx); denied != nil {
+			copy := *denied
+			copy.AllowFallbacks = new(false)
+			return nil, &copy
+		}
+		if planningEnded() {
+			return nil, producerError(408, "managed caller left before funded dispatch").Error
 		}
 		actualRoute = &schemas.ManagedExecutionRoute{Requested: principal.OriginalRoute(), Resolved: schemas.Route{Provider: target.Provider, Model: target.Model}, Foreign: ticket.Lease.Foreign}
 		ctx.SetRoutingInfoSnapshot(actualRoute.RoutingInfo())

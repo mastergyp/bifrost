@@ -30,8 +30,20 @@ func (p fixedPreparation) Prepare(_ *schemas.BifrostContext, _ admission.FrozenI
 	return admission.Preparation{Pools: []string{p.pool}, HealthyEngines: p.engines, Cost: 17, NativeWeight: 7}, nil
 }
 
-func (p fixedPreparation) AuthorizeSelected(_ *schemas.BifrostContext, _ *admission.Principal, lease admission.Lease, _ schemas.RequestType) (admission.ModelTarget, *schemas.BifrostError) {
-	return admission.ModelTarget{Pool: lease.Pool, Provider: schemas.OpenAI, Model: model}, nil
+// Only negative/unit fixtures use this synthetic approval. The actual owned
+// HTTP-to-Rust positive fixture below uses original governance-issued funding.
+type fixtureFunding struct {
+	target schemas.Route
+	typ    schemas.RequestType
+}
+
+func (f fixtureFunding) RequestType() schemas.RequestType                   { return f.typ }
+func (f fixtureFunding) Target() schemas.Route                              { return f.target }
+func (f fixtureFunding) Bind(*schemas.BifrostContext) *schemas.BifrostError { return nil }
+
+func (p fixedPreparation) AuthorizeSelected(_ *schemas.BifrostContext, _ *admission.Principal, lease admission.Lease, typ schemas.RequestType) (admission.Selection, *schemas.BifrostError) {
+	target := admission.ModelTarget{Pool: lease.Pool, Provider: schemas.OpenAI, Model: model}
+	return admission.Selection{Target: target, Funding: fixtureFunding{target: schemas.Route{Provider: target.Provider, Model: target.Model}, typ: typ}}, nil
 }
 
 type fundedPreparation struct {
@@ -39,13 +51,14 @@ type fundedPreparation struct {
 	governance *governance.GovernancePlugin
 }
 
-func (p *fundedPreparation) AuthorizeSelected(ctx *schemas.BifrostContext, principal *admission.Principal, lease admission.Lease, typ schemas.RequestType) (admission.ModelTarget, *schemas.BifrostError) {
-	target, _ := p.fixedPreparation.AuthorizeSelected(ctx, principal, lease, typ)
+func (p *fundedPreparation) AuthorizeSelected(ctx *schemas.BifrostContext, principal *admission.Principal, lease admission.Lease, typ schemas.RequestType) (admission.Selection, *schemas.BifrostError) {
+	selection, _ := p.fixedPreparation.AuthorizeSelected(ctx, principal, lease, typ)
+	target := selection.Target
 	funding, denied := p.governance.CheckManagedTarget(ctx, typ, schemas.Route{Provider: target.Provider, Model: target.Model}, principal.QueueDeadline())
 	if denied != nil {
-		return admission.ModelTarget{}, denied
+		return admission.Selection{}, denied
 	}
-	return target, funding.Bind(ctx)
+	return admission.Selection{Target: target, Funding: funding}, nil
 }
 
 type ownedSocket struct {
@@ -355,8 +368,8 @@ func TestConcreteProducerRejectsReplayedGatewayCallID(t *testing.T) {
 
 type cancelledPreparation struct{ started chan struct{} }
 
-func (p cancelledPreparation) AuthorizeSelected(_ *schemas.BifrostContext, _ *admission.Principal, _ admission.Lease, _ schemas.RequestType) (admission.ModelTarget, *schemas.BifrostError) {
-	return admission.ModelTarget{}, &schemas.BifrostError{StatusCode: new(503), Error: &schemas.ErrorField{Message: "cancelled fixture must not dispatch"}}
+func (p cancelledPreparation) AuthorizeSelected(_ *schemas.BifrostContext, _ *admission.Principal, _ admission.Lease, _ schemas.RequestType) (admission.Selection, *schemas.BifrostError) {
+	return admission.Selection{}, &schemas.BifrostError{StatusCode: new(503), Error: &schemas.ErrorField{Message: "cancelled fixture must not dispatch"}}
 }
 
 func (p cancelledPreparation) Prepare(ctx *schemas.BifrostContext, _ admission.FrozenInput, _ *admission.Principal) (admission.Preparation, error) {
@@ -400,8 +413,8 @@ func TestConcreteProducerCancellationBeforePreparationNeverQueues(t *testing.T) 
 // even though its selected-target financial policy explicitly refused it.
 type deniedSelectedPreparation struct{ fixedPreparation }
 
-func (p deniedSelectedPreparation) AuthorizeSelected(_ *schemas.BifrostContext, _ *admission.Principal, _ admission.Lease, _ schemas.RequestType) (admission.ModelTarget, *schemas.BifrostError) {
-	return admission.ModelTarget{}, &schemas.BifrostError{StatusCode: new(402), Error: &schemas.ErrorField{Message: "selected target budget exhausted"}}
+func (p deniedSelectedPreparation) AuthorizeSelected(_ *schemas.BifrostContext, _ *admission.Principal, _ admission.Lease, _ schemas.RequestType) (admission.Selection, *schemas.BifrostError) {
+	return admission.Selection{}, &schemas.BifrostError{StatusCode: new(402), Error: &schemas.ErrorField{Message: "selected target budget exhausted"}}
 }
 func TestConcreteProducerSelectedBudgetDenialNeverDispatchesOrSpends(t *testing.T) {
 	control, state := ownedPhysicalSocket(t)
@@ -431,7 +444,7 @@ type selectedFaultPreparation struct {
 	cancel context.CancelFunc
 }
 
-func (p selectedFaultPreparation) AuthorizeSelected(_ *schemas.BifrostContext, _ *admission.Principal, lease admission.Lease, _ schemas.RequestType) (admission.ModelTarget, *schemas.BifrostError) {
+func (p selectedFaultPreparation) AuthorizeSelected(_ *schemas.BifrostContext, _ *admission.Principal, lease admission.Lease, typ schemas.RequestType) (admission.Selection, *schemas.BifrostError) {
 	target := admission.ModelTarget{Pool: lease.Pool, Provider: schemas.OpenAI, Model: model}
 	switch p.kind {
 	case "pool":
@@ -441,10 +454,20 @@ func (p selectedFaultPreparation) AuthorizeSelected(_ *schemas.BifrostContext, _
 	case "cancel":
 		p.cancel()
 	}
-	return target, nil
+	funding := admission.SelectedFunding(fixtureFunding{target: schemas.Route{Provider: schemas.OpenAI, Model: model}, typ: typ})
+	if p.kind == "funding" {
+		funding = fixtureFunding{target: schemas.Route{Provider: schemas.OpenAI, Model: "different-funded-model"}, typ: typ}
+	}
+	if p.kind == "type" {
+		funding = fixtureFunding{target: schemas.Route{Provider: schemas.OpenAI, Model: model}, typ: schemas.ResponsesRequest}
+	}
+	if p.kind == "missing-funding" {
+		funding = nil
+	}
+	return admission.Selection{Target: target, Funding: funding}, nil
 }
 func TestConcreteProducerSelectedTargetScopeOrCancellationNeverDispatches(t *testing.T) {
-	for _, kind := range []string{"pool", "scope", "cancel"} {
+	for _, kind := range []string{"pool", "scope", "cancel", "funding", "missing-funding", "type"} {
 		t.Run(kind, func(t *testing.T) {
 			control, state := ownedPhysicalSocket(t)
 			ctx, cancel := ctxFor(vkValue)
@@ -459,6 +482,9 @@ func TestConcreteProducerSelectedTargetScopeOrCancellationNeverDispatches(t *tes
 			expected := 403
 			if kind == "cancel" {
 				expected = 408
+			}
+			if kind == "missing-funding" {
+				expected = 503
 			}
 			if failure == nil || failure.StatusCode == nil || *failure.StatusCode != expected {
 				t.Fatalf("selected %s status: %v", kind, failure)
