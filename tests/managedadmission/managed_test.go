@@ -139,9 +139,10 @@ func newFixture(t *testing.T, delegated bool, withRuntime ...bool) *fixture {
 }
 
 type fixtureRouting struct {
-	keylessEmpty bool
-	aliases      []admission.NativeModelAlias
-	plugins      []schemas.LLMPlugin
+	runtimeFactory func(*governance.GovernancePlugin) *admission.Runtime
+	keylessEmpty   bool
+	aliases        []admission.NativeModelAlias
+	plugins        []schemas.LLMPlugin
 }
 
 func fixtureWithInner(t *testing.T, delegated, useRuntime bool, inner schemas.ManagedInference, pool string, routing ...fixtureRouting) *fixture {
@@ -199,7 +200,7 @@ func fixtureWithInner(t *testing.T, delegated, useRuntime bool, inner schemas.Ma
 	if inner != nil {
 		boundary = inner
 	}
-	if useRuntime {
+	if useRuntime && options.runtimeFactory == nil {
 		native, _ := admission.NewNativeAuthorizer([]byte(strings.Repeat("s", 32)), nil)
 		verifier, e := admission.NewDelegationVerifier([]admission.DelegationKey{{ID: "owned-key-1", Secret: bytes.Repeat([]byte{11}, 32), GatewayVirtualKeyIDs: []string{vkID}}})
 		if e != nil {
@@ -209,6 +210,10 @@ func fixtureWithInner(t *testing.T, delegated, useRuntime bool, inner schemas.Ma
 		if e != nil {
 			t.Fatal(e)
 		}
+		boundary = runtime
+	}
+	if options.runtimeFactory != nil {
+		runtime = options.runtimeFactory(plugin)
 		boundary = runtime
 	}
 	client, err := bifrost.Init(context.Background(), schemas.BifrostConfig{Account: a, Logger: logger, LLMPlugins: append([]schemas.LLMPlugin{plugin}, options.plugins...), ModelCatalog: catalog, ManagedInference: boundary})

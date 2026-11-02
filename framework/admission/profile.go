@@ -204,7 +204,11 @@ func (p *preparationPolicy) Prepare(ctx *schemas.BifrostContext, input FrozenInp
 		request.MaxContext = principal.delegation.claims.MaxContextTokens
 		request.MaxOutput = principal.delegation.claims.MaxOutputTokens
 	}
-	raw, err := json.Marshal(request)
+	var envelope bytes.Buffer
+	encoder := json.NewEncoder(&envelope)
+	encoder.SetEscapeHTML(false)
+	err := encoder.Encode(request)
+	raw := envelope.Bytes()
 	if err != nil || len(raw) > maxInferenceBytes+32768 {
 		return Preparation{}, ErrRejected
 	}

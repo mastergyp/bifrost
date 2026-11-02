@@ -74,7 +74,7 @@ func profileFunding(*schemas.BifrostContext, schemas.RequestType, schemas.Route,
 }
 
 func TestManagedProfileLoadsSameRuntimeAndPreservesRPCBody(t *testing.T) {
-	raw := []byte(`{"messages":[{"role":"user","content":"hello"}],"model":"native-qwen"}`)
+	raw := []byte(`{"messages":[{"role":"user","content":"<html>&content</html>"}],"model":"native-qwen"}`)
 	calls := 0
 	socket := profileSocket(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
