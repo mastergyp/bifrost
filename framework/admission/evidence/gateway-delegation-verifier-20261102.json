@@ -1,0 +1,24 @@
+{
+  "bifrost_revision": "4fb6de9fd2e074c4598b799efd1e52e8b9e4d601",
+  "passed": true,
+  "admission_race": {
+    "pass": 32,
+    "skip": 3,
+    "fail": 0,
+    "log_sha256": "28acaf0c2e1bffc0259c45fc0cac35453f3228f72e71933de9dbcc248e479399"
+  },
+  "original_governance_sdk_regression": {
+    "pass": 10,
+    "skip": 0,
+    "fail": 0,
+    "log_sha256": "8ab486cbb13595985203cbcc5b32cbe392cce8f3502eca4b59c8dfd82de8c0f2"
+  },
+  "vet_passed": true,
+  "sensitive_header_regression_passed": true,
+  "cross_language_http_receipt_sha256": "ee4b93d68a89cd57619b55541c906ad7ea3852cc631cb76f0151a814b87e5c8c",
+  "wire_shape": "owned Gateway Chat ordinary HTTP only; not native Bifrost HTTP runtime",
+  "production_modified": false,
+  "factory_registered": false,
+  "replay_consumption_implemented": false,
+  "whole_release_qualified": false
+}

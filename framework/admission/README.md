@@ -177,3 +177,15 @@ protocol/authorization component; no current HTTP request can reach the new
 verifier through the unmodified server factory, so its provider-harness exemption
 is limited to that fact. Do not interpret optional Gateway signature sending as
 physical routing enforcement.
+
+Fixed-source qualification: verifier code `4fb6de9fd2e074c4598b799efd1e52e8b9e4d601`
+and Gateway source `e70b0a7ffa3e55d73a84fa854133e50fd593688f` passed the
+[owned actual HTTP cross-language fixture](evidence/gateway-delegation-paired-20261102.json).
+Two ordinary Chat requests with the same caller trace produced two original
+Gateway ledger rows; server-owned root IDs remained distinct, forged caller
+tokens were ignored, and Go preserved the signed model intersection and original
+Limits. This fixture does not exercise native Bifrost HTTP handlers, Responses
+or streaming delegation. The [verifier regression receipt](evidence/gateway-delegation-verifier-20261102.json)
+records 32 admission race pass events (three opt-in probes skipped separately),
+10 real-governance SDK regressions, vet and trace-header redaction. Policy caps
+are signed and verified, but their final routing enforcement remains pending.

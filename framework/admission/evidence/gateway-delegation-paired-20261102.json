@@ -1,0 +1,27 @@
+{
+  "passed": true,
+  "gateway_revision": "e70b0a7ffa3e55d73a84fa854133e50fd593688f",
+  "bifrost_revision": "4fb6de9fd2e074c4598b799efd1e52e8b9e4d601",
+  "go_probe_sha256": "9cc8a2f957ebda6ada0c98ed33aa95e90b081ab72c02f2d85f2e656683b5a306",
+  "executor_sha256": "9ee08abd51238b0065965270083d858cb685d88bdb40773a2efefea33bd686b1",
+  "postgres_image": "sha256:108b27c919e6e7bc124350fb265deea9adac58e118eade428c6d1ad44b90debe",
+  "redis_image": "sha256:aa189b5a1954929c393585e6dc5717a75b18f75a931df8bdcc00a3d3bd546be6",
+  "owned_containers_removed": 2,
+  "production_accessed": false,
+  "real_model_calls": 0,
+  "bifrost_http_factory_registered": false,
+  "whole_model_routing_release_qualified": false,
+  "markers": [
+    {
+      "actual_upstream_calls": 2,
+      "caller_token_ignored": true,
+      "cross_language_go_verifier": true,
+      "original_ledger_rows": 2,
+      "original_scope_preserved": true,
+      "owned_gateway_http_delegation_passed": true,
+      "raw_controls_frozen": true
+    }
+  ],
+  "original_completed_ledger_rows": 2,
+  "gateway_http_log_sha256": "99aa56b77d186203e021485cc2c09d48c1c3aae80099138c56b573abf8130785"
+}
