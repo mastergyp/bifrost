@@ -77,3 +77,9 @@ an otherwise empty environment. It must reject Chat-to-Responses misuse, perform
 one real Unix→Rust→mock-engine POST, consume the result and release the physical
 lease. Ordinary Go tests skip both Rust probes; a separate receipt records their
 explicit execution. No real model, production key, database or URL is supplied.
+
+The explicit Go/Rust inference probe has now passed with core/client source
+`3cd9342` and Gateway fixture `b4f34d6`: 64 KiB exact request, one mock POST,
+`finished` physical lease, active zero and schema/PG removed. See
+[evidence](evidence/go-rust-managed-inference-20261102.json). This is a local
+transport/execution proof; no public hook, production DB or real model was used.

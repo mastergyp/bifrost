@@ -1,0 +1,50 @@
+{
+  "passed": true,
+  "bifrost_source": "3cd9342f8d96f495fff5e6a075e5618a54b7b00f",
+  "gateway_source": "b4f34d6226a07433a9dad70eae54ea25b52792b6",
+  "go_probe_sha256": "94577d20282adf5c0a49f3c6aed1fc3dfa81ebca18bd9a6d5ca36049713c2f13",
+  "gateway_receipt_sha256": "47798433565b54d01bb0bf347113c8bde11ec5f3072f1c07619815ed4f81716e",
+  "gateway_receipt": "https://github.com/mastergyp/shinewing-ai-gateway/blob/codex/model-overflow-routing/docs/evidence/go-rust-execution-b4f34d6-20261102.json",
+  "markers": [
+    {
+      "owned_go_rust_inference_protocol_passed": true,
+      "request_body_over_control_limit": true,
+      "physical_state": "finished",
+      "production_enforcement": false
+    },
+    {
+      "bounded_partial_body": true,
+      "control_available_with_pending_inferences": 8,
+      "owned_uds_inference_passed": true,
+      "peer_denial_before_body": true
+    },
+    {
+      "actual_mock_http_calls": 21,
+      "ambiguous_cases_retained_until_mock_receipt": 3,
+      "api_path_bound_before_io": true,
+      "duplicate_endpoint_and_namespace_refused": true,
+      "no_inference_replay_after_pg_recovery": true,
+      "owned_execution_driver_passed": true,
+      "production_engine_receipt_qualified": false,
+      "shutdown_waited_for_validation": true,
+      "terminal_independent_of_consumer": true,
+      "terminal_settlement_retries": 1
+    },
+    {
+      "capacity_integration_passed": true,
+      "concurrent_requests": 100,
+      "qwen": 16,
+      "glm_spill": 6,
+      "ds_shared_spill": 24,
+      "native_reserve": 14,
+      "owned_control_socket_passed": true,
+      "active_at_end": 0,
+      "owned_schema_removed": true
+    }
+  ],
+  "production_databases_used": false,
+  "production_model_calls": 0,
+  "all_entrances_enforced": false,
+  "owned_postgres_removed": true,
+  "cleanup_errors": []
+}
