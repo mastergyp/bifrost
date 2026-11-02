@@ -1,3 +1,18 @@
+2026-11-03 incremental readiness fix: loaded profiles attest exact namespace
+and execution contract at GET /sw/gateway/health (no-store). Unconfigured,
+prototype and closed runtimes return503. Gateway checks this bounded private
+channel before employee reservation. Seven owned not-ready/mismatch/malformed/
+timeout cases leave ledger and RPM untouched; the same profile then passes six
+Gateway success scenarios and original 7-row/72-unit accounting. Native and
+ordinary employee queue weights now both default to1, independent of native
+capacity reserves. [Fixed-source joint proof](evidence/managed-readiness-accounting-20261103.json).
+
+Go admission package passes; readiness regression failed404 before the fix.
+Provider harness folder130 covers unconfigured health503 without model I/O;
+collection augmentation and OpenAI filtering preserve it. No paid sweep run.
+This remains synthetic model/fixed authorized-user evidence, not real GPU/IdP
+or production activation. Earlier artifact989 remains built, not active.
+
 # Standalone managed-admission startup
 
 Latest joint success qualification: Gateway `e75a3a9` / Bifrost `1c3628a`
