@@ -1,0 +1,134 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "status": "candidate_absolute_queue_and_sender_cas_qualified_not_production_release",
+  "gateway_runtime_source_revision": "709f1c4c362fdcb31925b021eb112c0f30bb92eb",
+  "gateway_fixture_source_revision": "709f1c4c362fdcb31925b021eb112c0f30bb92eb",
+  "bifrost_client_source_revision": "88f7fe194c8324958067ac9061f6c34a30a50ad8",
+  "actual_defect_red": {
+    "expired_prepared_lease_could_still_dispatch": true,
+    "valid_red_log_sha256": "11438a452a76731892175280411c3fe6b26fa1a25ef3edc0eadef1d24724ec36",
+    "owned_containers_removed": 2,
+    "missing_owned_flag_attempt_is_not_red_evidence": true
+  },
+  "fix": {
+    "absolute_deadline_persisted": true,
+    "replay_cannot_change_absolute_or_relative_mode": true,
+    "prepared_until_not_after_queue_deadline": true,
+    "actual_sender_cas_refuses_expired_preparation": true,
+    "poll_expires_never_dispatched_work": true,
+    "queue_expiry_never_releases_dispatched_or_uncertain_work": true,
+    "db_lock_wait_is_in_original_budget": true,
+    "go_client_rejects_even_1ms_extension": true,
+    "go_refuses_old_controller_without_absolute_capability": true,
+    "original_signed_weight_1000_preserved": true,
+    "durable_call_id_billing_and_cross_entry_contracts_qualified": false,
+    "pre_upgrade_prepared_ttl_cannot_bypass_persisted_queue_deadline": true,
+    "expired_legacy_preparation_cannot_pass_body_or_dispatch_claim": true
+  },
+  "go_race": {
+    "events": {
+      "github.com/maximhq/bifrost/framework/admission": {
+        "pass": 55,
+        "skip": 3
+      },
+      "github.com/mastergyp/bifrost-tests/managedadmission": {
+        "pass": 26
+      }
+    },
+    "log_sha256": "98fbe0defd50f627f36145ad7e72407e7ffaa40ae79c40b347d3f1e2ba661047",
+    "vet_passed": true,
+    "vet_log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "real_owned_qualification": {
+    "receipt_sha256": "6825ff81afb486d56e48d4841e8cc9fe1fa8aa225c8e4fd05c2302ccbd12d481",
+    "original_pg_redis_tests_passed": 121,
+    "original_ignored_opt_in_cases": 6,
+    "explicit_owned_capacity_test_passed": true,
+    "capacity_concurrent_requests": 100,
+    "actual_go_rust_control_and_inference_probes": true,
+    "mock_physical_state": "finished",
+    "active_at_end": 0,
+    "owned_schema_removed": true,
+    "original_gateway_http_requests": 2,
+    "original_completed_ledger_rows": 2,
+    "owned_containers_removed": 2,
+    "real_model_calls": 0,
+    "production_accessed": false,
+    "synthetic_user_content_bytes": 65536,
+    "actual_request_exceeds_32768_control_limit": true
+  },
+  "prior_failed_qualifications": [
+    {
+      "receipt_sha256": "058c7e3d3353fbea0db9401915d734790afb36ef3a95b69adec3a6eb55fa1fb9",
+      "owned_containers_removed": 2,
+      "classification": "qualification helper failed at createdb; diagnostic stderr unavailable, cause not established. Unix readiness can see initdb temporary server; helper now waits on TCP."
+    },
+    {
+      "receipt_sha256": "00048b12b991fa6195c0831c057e89a84e4953e40fe8519c85b833a1065aa8c5",
+      "owned_containers_removed": 2,
+      "classification": "Go inference fixture tried changing an existing relative queue into an absolute one. The new immutable-identity contract correctly rejected it; fixture changed so Go creates the first queue identity."
+    }
+  ],
+  "production_readonly": {
+    "containers": [
+      {
+        "id": "b10d07801c15c16e5e4c658590b67dd2e2282c7234676d52b29a641f5d0c6c5f",
+        "image": "sha256:ef872a4e1a8940002bf0b00409d018467280f46f99f502ada5193916db22d155",
+        "started": "2026-11-02T05:21:36.079522701Z",
+        "running": true,
+        "restarts": 0,
+        "config_host_sha256": "d0a8dace96166c5dc641396b41347c478fb96fe1dddbc3ec68dc5f4e991d324f"
+      },
+      {
+        "id": "9e5a21da164a3240d5ffd1c4e8d8591d01260df45c46f332596138195204db39",
+        "image": "sha256:54f62d143c37d5508cd4211d54751e9b686f503b2582bf0ac3e772b596b29520",
+        "started": "2026-11-01T05:24:42.033804517Z",
+        "running": true,
+        "restarts": 0,
+        "config_host_sha256": "c8ae10343e1dd6fd3621a140d2ffcad34976475e4310de51e944f49a6feb04a2"
+      }
+    ],
+    "health": {
+      "generic": {
+        "status": 200,
+        "service": "shinewing-ai-gateway",
+        "version": "0.5.0",
+        "revision": "fd17c5ed9c93b0805deefb941915a83831127dd4",
+        "published_version": 18
+      },
+      "admin": {
+        "status": 200,
+        "service": "shinewing-ai-gateway-admin",
+        "version": null,
+        "revision": null,
+        "published_version": 18
+      },
+      "llm": {
+        "status": 200,
+        "service": "shinewing-llm-access-gateway",
+        "version": "0.5.0",
+        "revision": null,
+        "published_version": null
+      }
+    }
+  },
+  "release": {
+    "production_mutated": false,
+    "standalone_cli_physical_producer_registered": false,
+    "all_entrances_enforced": false,
+    "whole_model_routing_release_qualified": false,
+    "new_fixed_linux_pg_image_qualified": false
+  },
+  "limits": [
+    "The Go socket probe uses explicit test-owned control calls while the production activation fence stays not_enabled.",
+    "The actual Go -> Rust -> mock-engine request is not a public Bifrost HTTP -> physical producer proof.",
+    "The separate Gateway original-ledger verifier request is not combined with that physical request.",
+    "Concrete producer/registry-target-finance/common-images/cache-receipts/abort-crash recovery/full-release remain pending."
+  ],
+  "prior_component_qualification_before_upgrade_guard": {
+    "receipt_sha256": "0ece88045d0b497cd1a3c54f99fbc708699020b35329e442739bf05c2e5d0748",
+    "source_revision": "220e47d00e7aa3dc7903ac2152ae6af1447ae447",
+    "scope": "before independent persisted-queue guard for pre-upgrade TTL; not relabelled as final source"
+  }
+}

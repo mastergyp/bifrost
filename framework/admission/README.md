@@ -263,3 +263,51 @@ keeps these synthetic HTTP proofs separate from the [new paired Gateway/Go
 verifier proof](evidence/gateway-delegation-paired-8b0d3e4-20261102.json), which
 uses two actual Gateway HTTP calls and two original ledger rows but does not
 traverse the Bifrost HTTP factory. Both disposable paired containers were removed.
+
+## Absolute queue budget and upgrade-safe sender claim
+
+`Client.AcquireUntil` carries an ingress-owned absolute deadline across health,
+Unix transport and database lock waits. Gateway adapters must use the verified
+original deadline and CallID; `Acquire(remaining)` is only a convenience for the
+phase that first owns a fresh budget. It must not be used to restart another
+phase's wait. The client requires the controller's absolute-deadline capability,
+rejects even a one-millisecond extension, preserves signed weights up to1000,
+and cancels an expired never-dispatched ticket before sending inference bytes.
+The production `not_enabled` activation fence is unchanged.
+
+The controller persists the first absolute bound and rejects replay that changes
+it or switches between absolute/relative modes. It checks the database clock
+again after obtaining its serialized lock, before inserting a queue position.
+Preparing a lease clamps its TTL to that original bound. More importantly, both
+sender/body checks and the atomic dispatch claim re-read the persisted queue;
+a pre-upgrade lease retaining the old15-second TTL cannot start overdue work.
+Polling expires only never-dispatched preparation. Dispatched/uncertain work
+still belongs to the sender until actual terminal evidence, not queue expiry.
+The additive nullable column preserves the legacy relative interface for old
+local callers; no existing quota/ledger/credential rows are replaced.
+
+`test-gateway-delegation.py --qualify-control` now runs original real PG/Redis
+regressions in a separate owned database, explicit100-request capacity/fault
+qualification, actual Go/Rust control and64KiB-content mock inference probes,
+and the independent two-request original-ledger verifier proof. Its temporary
+PostgreSQL readiness uses TCP, which is unavailable on initdb's temporary Unix
+server. The Go probe establishes the first absolute queue itself; rebinding an
+already-created relative queue must fail. All fixture sockets/DBs are owned and
+both containers are removed; no production credentials or real model is used.
+
+This increment changes the private peer-UID Unix protocol. No public provider
+HTTP route is registered to this client; the public paid provider harness cannot
+exercise it and is exempt. The earlier public provenance cases remain intact.
+A concrete managed producer/loader, original-call binding at every entrance,
+target registry/finance/contracts, common images/cache receipts, actual abort and
+crash financial recovery, and complete release/rollback are still required.
+
+Frozen client source `88f7fe194c8324958067ac9061f6c34a30a50ad8` passed55
+admission race events (three opt-in probes skipped in the ordinary suite),26
+original-governance SDK/HTTP events and vet. All three owned Go probes are run
+explicitly by the combined fixture. Gateway fixed source
+`709f1c4c362fdcb31925b021eb112c0f30bb92eb` passes121 real PG/Redis cases/6
+ordinary opt-in ignores, explicit capacity100/fault/upgrade-TTL cases, actual
+Go/Rust control and mock dispatch, and the separate two-row original ledger
+proof. See the [summary](evidence/absolute-queue-deadline-20261102.json) and
+[owned receipt](evidence/absolute-queue-owned-20261102.json).
