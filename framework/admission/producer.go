@@ -267,6 +267,7 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 	if ctx == nil || r == nil || principal == nil || principal.source.Alias == "" {
 		return producerError(403, "managed original principal required")
 	}
+	requestType := r.RequestType // the core request is pooled; protocol callbacks own only this scalar
 	if !p.enter() {
 		return producerError(503, "managed execution admission is closed or full")
 	}
@@ -350,7 +351,7 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 			_, _ = ticket.Cancel(cleanup)
 			return nil, producerError(408, "managed caller left before dispatch").Error
 		}
-		selection, refusal := p.selected.AuthorizeSelected(ctx, principal, ticket.Lease, r.RequestType)
+		selection, refusal := p.selected.AuthorizeSelected(ctx, principal, ticket.Lease, requestType)
 		if refusal != nil {
 			copy := *refusal
 			copy.AllowFallbacks = new(false)
@@ -371,7 +372,7 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 			return nil, producerError(503, "selected managed target funding is missing").Error
 		}
 		approved := selection.Funding.Target()
-		if approved.Provider != target.Provider || approved.Model != target.Model || approved.KeyID != "" || selection.Funding.RequestType() != r.RequestType {
+		if approved.Provider != target.Provider || approved.Model != target.Model || approved.KeyID != "" || selection.Funding.RequestType() != requestType {
 			return nil, producerError(403, "selected target does not match its funding approval").Error
 		}
 		if denied := selection.Funding.Bind(ctx); denied != nil {
@@ -405,7 +406,7 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 	}
 	var stream chan *schemas.BifrostStreamChunk
 	var failure *schemas.BifrostError
-	switch r.RequestType {
+	switch requestType {
 	case schemas.ChatCompletionRequest:
 		request := *r.ChatRequest
 		request.RawRequestBody = body
