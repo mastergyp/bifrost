@@ -965,7 +965,7 @@ func TestGatewayRuntimePreservesOriginalGrantAndSharedLegacyHomeAccess(t *testin
 				bf := nativeGrantContext("owned-gateway-transit", "service", nativePermits(true))
 				before := bf.Grant().Limits()
 				httpCtx.VisitUserValuesAll(func(k, v any) { bf.SetValue(k, v) })
-				if runtime.RequiresManaged(bf) != gateway {
+				if !runtime.RequiresManaged(bf) {
 					t.Fatal("trusted ingress provenance lost")
 				}
 				result := runtime.Handle(bf, &schemas.BifrostRequest{RequestType: schemas.ChatCompletionRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: "gpu0", Model: "qwen"}})
@@ -1242,6 +1242,151 @@ func TestFrozenProducerInputDebugDoesNotExposeBody(t *testing.T) {
 	for _, value := range []any{input, &input} {
 		if strings.Contains(fmt.Sprintf("%v %+v %#v", value, value, value), "private-prompt") {
 			t.Fatal("producer policy debug leaked model input")
+		}
+	}
+}
+
+// The HTTP boundary sees the original model before any transport/core routing.
+func TestNativeHTTPOriginalModelCannotBeReplacedByHookRouting(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		all      bool
+		provider schemas.ModelProvider
+		model    string
+		denied   bool
+	}{
+		{"source remains DS after permitted rewrite", true, "gpu0", "qwen", false},
+		{"denied DS cannot be laundered through Qwen", false, "gpu0", "qwen", true},
+		{"owned source cannot escape through unowned provider", true, "unowned", "other", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runtime, probe := runtimeFixture(t)
+			h := &fasthttp.RequestCtx{}
+			h.Request.SetRequestURI("/openai" + string(Chat))
+			h.Request.Header.SetMethod("POST")
+			h.Request.SetBodyString(`{"model":"gpu1/ds","temperature":0.2}`)
+			runtime.WrapHTTP(func(h *fasthttp.RequestCtx) {
+				ctx := nativeGrantContext("employee-key", "employee", nativePermits(tc.all))
+				h.VisitUserValuesAll(func(k, v any) { ctx.SetValue(k, v) })
+				if !runtime.RequiresManaged(ctx) {
+					t.Fatal("original owned model lost the managed boundary before routing")
+				}
+				result := runtime.Handle(ctx, &schemas.BifrostRequest{RequestType: schemas.ChatCompletionRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: tc.provider, Model: tc.model}})
+				if tc.denied {
+					if result.Error == nil || probe.calls != 0 {
+						t.Fatal("routing bypassed original or actual-target authorization")
+					}
+				} else if result.Error != nil || probe.principal == nil || probe.principal.Source().Alias != "ds" {
+					t.Fatal("post-hook model replaced original model authority")
+				}
+			})(h)
+		})
+	}
+}
+
+func TestNativeLogicalAliasAndSDKIntentAreFrozenBeforeRouting(t *testing.T) {
+	base, probe := runtimeFixture(t)
+	models := append(append([]RuntimeModel(nil), base.models...), RuntimeModel{Alias: "qwen-thinking", ModelTarget: nativeTargets()[0]})
+	aliases := []NativeModelAlias{{Provider: "gpu0", Model: "qwen-thinking-wire", SourceAlias: "qwen-thinking"}}
+	runtime, err := NewRuntime(probe, base.native, base.verifier, models, nil, aliases...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	aliases[0].SourceAlias = "ds" // deployment input cannot mutate the immutable runtime
+	permits := nativePermits(true)
+	permits[0].AllowedModels = schemas.WhiteList{"qwen", "qwen-thinking-wire"}
+	for _, httpIngress := range []bool{false, true} {
+		for _, qualified := range []bool{false, true} {
+			t.Run(fmt.Sprintf("http=%t/qualified=%t", httpIngress, qualified), func(t *testing.T) {
+				ctx := nativeGrantContext("employee-key", "employee", permits)
+				req := &schemas.BifrostRequest{RequestType: schemas.ChatCompletionRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: "gpu0", Model: "qwen-thinking-wire", Params: &schemas.ChatParameters{Temperature: new(0.2)}}}
+				exercise := func() {
+					runtime.CaptureRequest(ctx, req)
+					req.ChatRequest.Model = "qwen"
+					req.ChatRequest.Params.Temperature = new(0.9)
+					result := runtime.Handle(ctx, req)
+					if result.Error != nil || probe.principal == nil {
+						t.Fatal("registered native logical alias was disabled")
+					}
+					p := probe.principal
+					if p.Source().Alias != "qwen-thinking" || p.OriginalRoute().Provider != "gpu0" || p.OriginalRoute().Model != "qwen-thinking-wire" || p.RoutedTarget() != nativeTargets()[0] || string(p.controls["temperature"]) != "0.2" {
+						t.Fatal("routing replaced original alias, controls or target identity")
+					}
+					// A different SDK call on the same context gets fresh small intent,
+					// while an HTTP request's original snapshot remains authoritative.
+					if !httpIngress {
+						req.ChatRequest.Model = "ds"
+						req.ChatRequest.Provider = "gpu1"
+						runtime.CaptureRequest(ctx, req)
+						req.ChatRequest.Model = "qwen"
+						req.ChatRequest.Provider = "gpu0"
+						result = runtime.Handle(ctx, req)
+						if result.Error != nil || probe.principal.Source().Alias != "ds" {
+							t.Fatal("SDK call inherited stale original model")
+						}
+					}
+				}
+				if !httpIngress {
+					exercise()
+					return
+				}
+				h := &fasthttp.RequestCtx{}
+				h.Request.SetRequestURI("/openai" + string(Chat))
+				h.Request.Header.SetMethod("POST")
+				name := "qwen-thinking-wire"
+				if qualified {
+					name = "gpu0/" + name
+				}
+				h.Request.SetBodyString(`{"model":"` + name + `","temperature":0.2}`)
+				runtime.WrapHTTP(func(h *fasthttp.RequestCtx) {
+					h.VisitUserValuesAll(func(k, v any) { ctx.SetValue(k, v) })
+					// A transport hook changing the body/typed request must not win.
+					h.Request.SetBodyString(`{"model":"gpu1/ds","temperature":0.9}`)
+					exercise()
+				})(h)
+			})
+		}
+	}
+}
+
+func TestNativeAliasRegistryAndActualTargetMustRemainAuthorized(t *testing.T) {
+	base, probe := runtimeFixture(t)
+	for _, aliases := range [][]NativeModelAlias{
+		{{Provider: "gpu0", Model: "qwen", SourceAlias: "ds"}},
+		{{Provider: "gpu0", Model: "logical", SourceAlias: "missing"}},
+		{{Provider: "gpu0", Model: "logical", SourceAlias: "qwen"}, {Provider: "gpu0", Model: "logical", SourceAlias: "qwen"}},
+	} {
+		if _, err := NewRuntime(probe, base.native, base.verifier, base.models, nil, aliases...); err == nil {
+			t.Fatal("ambiguous native alias registry accepted")
+		}
+	}
+	ctx := nativeGrantContext("employee-key", "employee", nativePermits(false))
+	req := &schemas.BifrostRequest{RequestType: schemas.ChatCompletionRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: "gpu0", Model: "qwen"}}
+	base.CaptureRequest(ctx, req)
+	req.ChatRequest.Provider = "gpu1"
+	req.ChatRequest.Model = "ds"
+	if result := base.Handle(ctx, req); result.Error == nil || probe.calls != 0 {
+		t.Fatal("original Qwen permission authorized a denied routed DS target")
+	}
+}
+
+func TestNativeOriginalMetadataIsBoundedAndAmbiguousNamesDoNotPickAProvider(t *testing.T) {
+	base, probe := runtimeFixture(t)
+	models := []RuntimeModel{{Alias: "one", ModelTarget: ModelTarget{Pool: "one", Provider: "gpu0", Model: "same"}}, {Alias: "two", ModelTarget: ModelTarget{Pool: "two", Provider: "gpu1", Model: "same"}}}
+	runtime, err := NewRuntime(probe, base.native, base.verifier, models, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if origin := runtime.nativeHTTPOrigin("same"); !origin.required || origin.source != nil {
+		t.Fatal("ambiguous unqualified model selected an arbitrary provider")
+	}
+	if origin := runtime.nativeHTTPOrigin("gpu1/same"); origin.source == nil || origin.source.Alias != "two" {
+		t.Fatal("explicit original provider lost")
+	}
+	for _, model := range []string{"", strings.Repeat("x", 10000), "model\ncontrol"} {
+		origin := runtime.nativeOrigin("gpu0", model)
+		if !origin.required || origin.source != nil || origin.requested.Model != "" {
+			t.Fatal("invalid or unbounded original model retained in context")
 		}
 	}
 }

@@ -4831,6 +4831,7 @@ type RealtimeTurnHooks struct {
 // and the pipeline continues to the next plugin (same semantics as RunLLMPreHooks). Callers
 // should validate req.Provider after this returns if a provider is required.
 func (bifrost *Bifrost) RunPreRequestHooks(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) {
+	bifrost.captureManagedRequest(ctx, req)
 	if ctx == nil {
 		ctx = bifrost.ctx
 	}
@@ -5352,6 +5353,7 @@ func (bifrost *Bifrost) handleRequest(ctx *schemas.BifrostContext, req *schemas.
 	// What the caller asked for, before any hook rewrites it: the name under which a session
 	// remembers where these requests were served. Reported back with how the request ended.
 	requested := schemas.Route{Provider: provider, Model: model}
+	bifrost.captureManagedRequest(ctx, req)
 	var served *schemas.Route
 	servedFallback := false
 	defer func() { bifrost.observeSessionOutcome(ctx, requested, served, servedFallback, bifrostErr) }()
@@ -5526,6 +5528,7 @@ func (bifrost *Bifrost) handleStreamRequest(ctx *schemas.BifrostContext, req *sc
 	// What the caller asked for, before any hook rewrites it: the name under which a session
 	// remembers where these requests were served. Reported back with how the request ended.
 	requested := schemas.Route{Provider: provider, Model: model}
+	bifrost.captureManagedRequest(ctx, req)
 	var served *schemas.Route
 	servedFallback := false
 	defer func() { bifrost.observeSessionOutcome(ctx, requested, served, servedFallback, bifrostErr) }()

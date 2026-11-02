@@ -337,6 +337,13 @@ type ContextManagedInference interface {
 	RequiresManaged(ctx *BifrostContext) bool
 }
 
+// ManagedRequestSnapshot captures small original intent before PreRequestHook
+// or session routing mutates a request. Implementations must not retain payloads
+// in the context. HTTP ingress may supply an earlier authoritative snapshot.
+type ManagedRequestSnapshot interface {
+	CaptureRequest(ctx *BifrostContext, request *BifrostRequest)
+}
+
 // ManagedShortcutPolicy validates successful pre-hook/cache results without
 // dispatching inference. Unqualified replies must not bypass original-caller
 // or actual-target policy; ordinary pre-hook denials retain their original error.

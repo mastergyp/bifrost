@@ -65,6 +65,7 @@ type managed struct {
 	release       chan struct{}
 	releaseOnce   sync.Once
 	closed        atomic.Bool
+	original      schemas.Route
 }
 
 func (m *managed) Owns(p schemas.ModelProvider) bool { return p == schemas.OpenAI }
@@ -82,6 +83,9 @@ func (m *managed) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest)
 	}
 	m.mu.Lock()
 	m.authorization = auth
+	if principal := admission.AdmittedPrincipal(ctx); principal != nil {
+		m.original = principal.OriginalRoute()
+	}
 	m.mu.Unlock()
 	chat := &schemas.BifrostChatResponse{ID: "synthetic-managed", Model: model, Object: "chat.completion", Choices: []schemas.BifrostResponseChoice{{Index: 0, FinishReason: new("stop"), ChatNonStreamResponseChoice: &schemas.ChatNonStreamResponseChoice{Message: &schemas.ChatMessage{Role: schemas.ChatMessageRoleAssistant, Content: &schemas.ChatMessageContent{ContentStr: new("done")}}}}}, Usage: &schemas.BifrostLLMUsage{PromptTokens: 5, CompletionTokens: 2, TotalTokens: 7}}
 	response := &schemas.BifrostResponsesResponse{ID: new("synthetic-managed"), Object: "response", Status: new("completed"), Model: model, Usage: &schemas.ResponsesResponseUsage{InputTokens: 5, OutputTokens: 2, TotalTokens: 7}}
@@ -132,8 +136,18 @@ func newFixture(t *testing.T, delegated bool, withRuntime ...bool) *fixture {
 	useRuntime := len(withRuntime) > 0 && withRuntime[0]
 	return fixtureWithInner(t, delegated, useRuntime, nil, "home")
 }
-func fixtureWithInner(t *testing.T, delegated, useRuntime bool, inner schemas.ManagedInference, pool string) *fixture {
+
+type fixtureRouting struct {
+	aliases []admission.NativeModelAlias
+	plugins []schemas.LLMPlugin
+}
+
+func fixtureWithInner(t *testing.T, delegated, useRuntime bool, inner schemas.ManagedInference, pool string, routing ...fixtureRouting) *fixture {
 	t.Helper()
+	var options fixtureRouting
+	if len(routing) != 0 {
+		options = routing[0]
+	}
 	logger := bifrost.NewNoOpLogger()
 	now := time.Now().UTC()
 	pricingPath := os.Getenv("SW_BIFROST_OWNED_PRICING_FILE")
@@ -152,6 +166,11 @@ func fixtureWithInner(t *testing.T, delegated, useRuntime bool, inner schemas.Ma
 	budget := tables.TableBudget{ID: "original-budget", MaxLimit: 1000, ResetDuration: "1d", LastReset: now, CurrentUsage: 13.25, VirtualKeyID: new(vkID)}
 	rate := tables.TableRateLimit{ID: "original-rate", TokenMaxLimit: new(int64(1_000_000)), TokenResetDuration: new("1d"), TokenCurrentUsage: 37, TokenLastReset: now, RequestMaxLimit: new(int64(1000)), RequestResetDuration: new("1d"), RequestCurrentUsage: 4, RequestLastReset: now}
 	vk := tables.TableVirtualKey{ID: vkID, Name: "owned fixture", Value: *schemas.NewSecretVar(vkValue), IsActive: new(true), ProviderConfigs: []tables.TableVirtualKeyProviderConfig{{Provider: "openai", AllowedModels: schemas.WhiteList{model}, AllowAllKeys: true}}, Budgets: []tables.TableBudget{budget}, RateLimitID: new(rate.ID), RateLimit: &rate}
+	for _, alias := range options.aliases {
+		if alias.Provider == schemas.OpenAI {
+			vk.ProviderConfigs[0].AllowedModels = append(vk.ProviderConfigs[0].AllowedModels, alias.Model)
+		}
+	}
 	store, err := governance.NewLocalGovernanceStore(context.Background(), logger, nil, &configstore.GovernanceConfig{VirtualKeys: []tables.TableVirtualKey{vk}, Budgets: []tables.TableBudget{budget}, RateLimits: []tables.TableRateLimit{rate}}, catalog, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -181,13 +200,13 @@ func fixtureWithInner(t *testing.T, delegated, useRuntime bool, inner schemas.Ma
 		if e != nil {
 			t.Fatal(e)
 		}
-		runtime, e = admission.NewRuntime(boundary, native, verifier, []admission.RuntimeModel{{Alias: "qwen", ModelTarget: admission.ModelTarget{Pool: pool, Provider: schemas.OpenAI, Model: model}}}, []string{vkID})
+		runtime, e = admission.NewRuntime(boundary, native, verifier, []admission.RuntimeModel{{Alias: "qwen", ModelTarget: admission.ModelTarget{Pool: pool, Provider: schemas.OpenAI, Model: model}}}, []string{vkID}, options.aliases...)
 		if e != nil {
 			t.Fatal(e)
 		}
 		boundary = runtime
 	}
-	client, err := bifrost.Init(context.Background(), schemas.BifrostConfig{Account: a, Logger: logger, LLMPlugins: []schemas.LLMPlugin{plugin}, ModelCatalog: catalog, ManagedInference: boundary})
+	client, err := bifrost.Init(context.Background(), schemas.BifrostConfig{Account: a, Logger: logger, LLMPlugins: append([]schemas.LLMPlugin{plugin}, options.plugins...), ModelCatalog: catalog, ManagedInference: boundary})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -484,5 +503,106 @@ func TestActualHTTPGatewayDenialsDoNotSpendOrReachManagedProducer(t *testing.T) 
 				t.Fatal("denied HTTP request reached managed producer")
 			}
 		})
+	}
+}
+
+// This mirrors the deployed same-backend thinking-alias rule without changing
+// production configuration or using the actual model/provider credentials.
+type nativeAliasHook struct{ calls atomic.Int64 }
+
+func (*nativeAliasHook) GetName() string { return "owned-native-alias" }
+func (*nativeAliasHook) Cleanup() error  { return nil }
+func (h *nativeAliasHook) PreRequestHook(_ *schemas.BifrostContext, req *schemas.BifrostRequest) error {
+	h.calls.Add(1)
+	if req.ChatRequest != nil {
+		req.ChatRequest.Model = model
+	}
+	if req.ResponsesRequest != nil {
+		req.ResponsesRequest.Model = model
+	}
+	return nil
+}
+func (*nativeAliasHook) PreLLMHook(_ *schemas.BifrostContext, req *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	return req, nil, nil
+}
+func (*nativeAliasHook) PostLLMHook(_ *schemas.BifrostContext, resp *schemas.BifrostResponse, err *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
+	return resp, err, nil
+}
+
+func TestNativeHTTPAndSDKAliasRoutingKeepOriginalModelAndGovernance(t *testing.T) {
+	const logical = model + "-thinking"
+	for _, httpIngress := range []bool{false, true} {
+		for _, responses := range []bool{false, true} {
+			for _, stream := range []bool{false, true} {
+				t.Run(fmt.Sprintf("http=%t/responses=%t/stream=%t", httpIngress, responses, stream), func(t *testing.T) {
+					hook := &nativeAliasHook{}
+					f := fixtureWithInner(t, false, true, nil, "home", fixtureRouting{aliases: []admission.NativeModelAlias{{Provider: schemas.OpenAI, Model: logical, SourceAlias: "qwen"}}, plugins: []schemas.LLMPlugin{hook}})
+					f.managed.finish()
+					if httpIngress {
+						base, client := ownedHTTP(t, f)
+						api := string(admission.Chat)
+						payload := map[string]any{"model": "openai/" + logical, "stream": stream, "messages": []any{map[string]any{"role": "user", "content": "owned alias"}}}
+						if responses {
+							api = string(admission.Responses)
+							delete(payload, "messages")
+							payload["input"] = "owned alias"
+						}
+						raw, _ := json.Marshal(payload)
+						req, _ := http.NewRequest("POST", base+"/openai"+api, bytes.NewReader(raw))
+						req.Header.Set("Content-Type", "application/json")
+						req.Header.Set("x-bf-vk", vkValue)
+						response, err := client.Do(req)
+						if err != nil {
+							t.Fatal(err)
+						}
+						data, err := io.ReadAll(response.Body)
+						response.Body.Close()
+						if err != nil || response.StatusCode != 200 {
+							t.Fatalf("alias HTTP status=%d error=%v body=%s", response.StatusCode, err, data)
+						}
+					} else {
+						ctx, cancel := ctxFor(vkValue)
+						defer cancel()
+						req := request(logical)
+						var err *schemas.BifrostError
+						if stream {
+							var ch chan *schemas.BifrostStreamChunk
+							if responses {
+								ch, err = f.client.ResponsesStreamRequest(ctx, req.ToResponsesRequest())
+							} else {
+								ch, err = f.client.ChatCompletionStreamRequest(ctx, req)
+							}
+							if err == nil {
+								for range ch {
+								}
+							}
+						} else if responses {
+							_, err = f.client.ResponsesRequest(ctx, req.ToResponsesRequest())
+						} else {
+							_, err = f.client.ChatCompletionRequest(ctx, req)
+						}
+						if err != nil {
+							t.Fatalf("alias SDK failed: %+v", err)
+						}
+					}
+					f.client.Shutdown()
+					f.managed.mu.Lock()
+					original := f.managed.original
+					auth := f.managed.authorization
+					f.managed.mu.Unlock()
+					data := f.store.GetGovernanceData(context.Background())
+					rate := data.RateLimits["original-rate"]
+					if original.Provider != schemas.OpenAI || original.Model != logical || hook.calls.Load() != 1 || f.managed.calls.Load() != 1 || f.account.keys.Load() != 0 || len(auth.Pools) != 1 || auth.Pools[0] != "home" || auth.OriginalLimits == nil {
+						t.Fatalf("original alias or managed boundary lost: original=%v route_calls=%d managed_calls=%d", original, hook.calls.Load(), f.managed.calls.Load())
+					}
+					priced := &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{Model: model, Usage: &schemas.BifrostLLMUsage{PromptTokens: 5, CompletionTokens: 2, TotalTokens: 7}}}
+					priced.PopulateExtraFields(schemas.ChatCompletionRequest, schemas.OpenAI, model, model)
+					cost := f.catalog.CalculateCost(priced, nil)
+					if cost <= 0 || math.Abs(data.Budgets["original-budget"].CurrentUsage-(13.25+cost)) > 1e-10 || rate.TokenCurrentUsage != 44 || rate.RequestCurrentUsage != 5 {
+						t.Fatal("alias routing changed original money/token/request accounting")
+					}
+				})
+			}
+		}
 	}
 }

@@ -2,6 +2,17 @@ package bifrost
 
 import "github.com/maximhq/bifrost/core/schemas"
 
+func (b *Bifrost) captureManagedRequest(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) {
+	// Nil-context calls use the shared core context and have no original
+	// authenticated Grant. Do not put caller-specific snapshots on that root.
+	if ctx == nil || ctx == b.ctx {
+		return
+	}
+	if snapshot, ok := b.managedInference.(schemas.ManagedRequestSnapshot); ok {
+		snapshot.CaptureRequest(ctx, req)
+	}
+}
+
 func managedFailure() *schemas.BifrostError {
 	return &schemas.BifrostError{StatusCode: new(503), IsBifrostError: true, AllowFallbacks: new(false), Error: &schemas.ErrorField{Message: "managed inference is unavailable"}}
 }

@@ -29,6 +29,15 @@ type RuntimeModel struct {
 	ModelTarget
 }
 
+// NativeModelAlias explicitly binds a logical native model to its registered
+// source contract. A pre-request routing hook may translate this alias, but
+// cannot replace the original authorization or quality contract with its target.
+type NativeModelAlias struct {
+	Provider    schemas.ModelProvider
+	Model       string
+	SourceAlias string
+}
+
 type gatewayEnvelope struct {
 	proof  *VerifiedDelegation
 	source RuntimeModel
@@ -44,11 +53,21 @@ type Principal struct {
 	deadline        time.Time
 	controls        map[string]json.RawMessage
 	controlsInvalid bool
+	original        schemas.Route
+	routed          ModelTarget
+}
+
+type nativeOrigin struct {
+	source    *RuntimeModel
+	requested schemas.Route
+	required  bool
 }
 type nativeBudget struct {
 	deadline time.Time
 	controls map[string]json.RawMessage
 	invalid  bool
+	http     bool
+	origin   nativeOrigin
 }
 
 func (p *Principal) Authorization() NativeAuthorization {
@@ -78,6 +97,18 @@ func (p *Principal) QueueDeadline() time.Time {
 	}
 	return p.deadline
 }
+func (p *Principal) OriginalRoute() schemas.Route {
+	if p == nil {
+		return schemas.Route{}
+	}
+	return p.original
+}
+func (p *Principal) RoutedTarget() ModelTarget {
+	if p == nil {
+		return ModelTarget{}
+	}
+	return p.routed
+}
 func (p *Principal) Delegation() *VerifiedDelegation {
 	if p == nil {
 		return nil
@@ -103,10 +134,11 @@ type Runtime struct {
 	verifier  *DelegationVerifier
 	models    []RuntimeModel
 	sharedIDs map[string]bool
+	aliases   []NativeModelAlias
 }
 
-func NewRuntime(inner schemas.ManagedInference, native *NativeAuthorizer, verifier *DelegationVerifier, models []RuntimeModel, sharedLegacyVKIDs []string) (*Runtime, error) {
-	if inner == nil || native == nil || len(native.secret) < 32 || verifier == nil || len(verifier.keys) == 0 || len(models) == 0 || len(models) > 32 || len(sharedLegacyVKIDs) > 128 {
+func NewRuntime(inner schemas.ManagedInference, native *NativeAuthorizer, verifier *DelegationVerifier, models []RuntimeModel, sharedLegacyVKIDs []string, nativeAliases ...NativeModelAlias) (*Runtime, error) {
+	if inner == nil || native == nil || len(native.secret) < 32 || verifier == nil || len(verifier.keys) == 0 || len(models) == 0 || len(models) > 32 || len(sharedLegacyVKIDs) > 128 || len(nativeAliases) > 128 {
 		return nil, ErrRejected
 	}
 	r := &Runtime{inner: inner, native: native, verifier: verifier, models: append([]RuntimeModel(nil), models...), sharedIDs: map[string]bool{}}
@@ -138,7 +170,121 @@ func NewRuntime(inner schemas.ManagedInference, native *NativeAuthorizer, verifi
 		}
 		r.sharedIDs[id] = true
 	}
+	bindings := map[string]bool{}
+	for _, alias := range nativeAliases {
+		wire := string(alias.Provider) + "/" + alias.Model
+		if !boundedIdentity(string(alias.Provider)) || !boundedIdentity(alias.Model) || !aliases[alias.SourceAlias] || bindings[wire] {
+			return nil, ErrRejected
+		}
+		// A logical alias cannot replace another registered model's authority.
+		for _, model := range models {
+			if wire == string(model.Provider)+"/"+model.Model && alias.SourceAlias != model.Alias {
+				return nil, ErrRejected
+			}
+		}
+		bindings[wire] = true
+	}
+	r.aliases = append([]NativeModelAlias(nil), nativeAliases...)
 	return r, nil
+}
+
+func (r *Runtime) nativeOrigin(provider schemas.ModelProvider, model string) nativeOrigin {
+	if !boundedIdentity(model) || provider != "" && !boundedIdentity(string(provider)) {
+		return nativeOrigin{required: r.Owns(provider)}
+	}
+	origin := nativeOrigin{requested: schemas.Route{Provider: schemas.ModelProvider(strings.Clone(string(provider))), Model: strings.Clone(model)}, required: r.Owns(provider)}
+	for _, alias := range r.aliases {
+		if alias.Model == model && (provider == "" || alias.Provider == provider) {
+			for i := range r.models {
+				if r.models[i].Alias == alias.SourceAlias {
+					if origin.source != nil && origin.source.Alias != alias.SourceAlias {
+						origin.source = nil
+						origin.required = true
+						return origin
+					}
+					origin.source = &r.models[i]
+					origin.requested.Provider = alias.Provider
+				}
+			}
+		}
+	}
+	if origin.source == nil {
+		for i := range r.models {
+			m := &r.models[i]
+			if m.Model == model && (provider == "" || m.Provider == provider) {
+				if origin.source != nil && origin.source.ModelTarget != m.ModelTarget {
+					origin.source = nil
+					origin.required = true
+					return origin
+				}
+				if origin.source == nil {
+					origin.source = m
+					origin.requested.Provider = m.Provider
+				}
+			}
+		}
+	}
+	origin.required = origin.required || origin.source != nil
+	return origin
+}
+
+func (r *Runtime) nativeHTTPOrigin(model string) nativeOrigin {
+	// Prefer a registered explicit provider prefix. A model name may itself
+	// contain '/', so an arbitrary prefix is never guessed to be a provider.
+	if provider, name, ok := strings.Cut(model, "/"); ok {
+		if origin := r.nativeOrigin(schemas.ModelProvider(provider), name); origin.required {
+			return origin
+		}
+	}
+	return r.nativeOrigin("", model)
+}
+
+// CaptureRequest runs before core pre-request hooks and session routing. HTTP
+// metadata was frozen still earlier, before HTTP transport hooks. Direct SDK
+// calls freeze only bounded controls, model and deadline here, never payloads.
+func (r *Runtime) CaptureRequest(ctx *schemas.BifrostContext, req *schemas.BifrostRequest) {
+	if r == nil || ctx == nil || req == nil || r.requiresDelegation(ctx) {
+		return
+	}
+	if budget, ok := ctx.Value(nativeBudgetKey).(*nativeBudget); ok && budget != nil && budget.http {
+		return
+	}
+	provider, model, _ := req.GetRequestFields()
+	budget := &nativeBudget{deadline: time.Now().Add(60 * time.Second), origin: r.nativeOrigin(provider, model)}
+	budget.controls, budget.invalid = sdkControls(req)
+	ctx.SetValue(nativeBudgetKey, budget)
+}
+
+func sdkControls(req *schemas.BifrostRequest) (map[string]json.RawMessage, bool) {
+	var params any
+	var extra map[string]interface{}
+	if req.ChatRequest != nil && req.ChatRequest.Params != nil {
+		params, extra = req.ChatRequest.Params, req.ChatRequest.Params.ExtraParams
+	} else if req.ResponsesRequest != nil && req.ResponsesRequest.Params != nil {
+		params, extra = req.ResponsesRequest.Params, req.ResponsesRequest.Params.ExtraParams
+	}
+	controls := map[string]json.RawMessage{}
+	if params != nil {
+		raw, err := json.Marshal(params)
+		if err != nil {
+			return nil, true
+		}
+		controls, err = extractControls(raw)
+		if err != nil {
+			return nil, true
+		}
+	}
+	for k, v := range extra {
+		if controlFields[k] {
+			raw, err := json.Marshal(v)
+			if err != nil {
+				return nil, true
+			}
+			controls[k] = raw
+		}
+	}
+	raw, err := json.Marshal(controls)
+	return controls, err != nil || len(raw) > 3072
 }
 
 func (*Runtime) String() string                { return "managed admission runtime (redacted)" }
@@ -153,6 +299,16 @@ func (r *Runtime) Owns(provider schemas.ModelProvider) bool {
 	return r != nil && r.inner != nil && r.inner.Owns(provider)
 }
 func (r *Runtime) RequiresManaged(ctx *schemas.BifrostContext) bool {
+	if ctx == nil {
+		return false
+	}
+	if r.requiresDelegation(ctx) {
+		return true
+	}
+	budget, ok := ctx.Value(nativeBudgetKey).(*nativeBudget)
+	return ok && budget != nil && budget.origin.required
+}
+func (r *Runtime) requiresDelegation(ctx *schemas.BifrostContext) bool {
 	if ctx == nil {
 		return false
 	}
@@ -202,6 +358,17 @@ func (r *Runtime) handleAt(ctx *schemas.BifrostContext, req *schemas.BifrostRequ
 	if source == nil {
 		return provenanceError(403)
 	}
+	routed := source.ModelTarget
+	original := schemas.Route{Provider: source.Provider, Model: source.Model}
+	if !delegated {
+		if budget, ok := ctx.Value(nativeBudgetKey).(*nativeBudget); ok && budget != nil {
+			if budget.origin.source == nil {
+				return provenanceError(403)
+			}
+			source = budget.origin.source
+			original = budget.origin.requested
+		}
+	}
 	var auth NativeAuthorization
 	var session *string
 	var proof *VerifiedDelegation
@@ -223,6 +390,10 @@ func (r *Runtime) handleAt(ctx *schemas.BifrostContext, req *schemas.BifrostRequ
 		auth, err = proof.Authorize(ctx, DelegationTarget{Alias: source.Alias, ModelTarget: source.ModelTarget}, targets, now)
 		session = proof.SessionHash()
 	} else {
+		grant := ctx.Grant()
+		if grant == nil || grant.Access() == nil || !grant.Access().IsModelAllowed(string(original.Provider), original.Model) {
+			return provenanceError(403)
+		}
 		targets := make([]ModelTarget, 0, len(r.models))
 		seen := map[string]bool{}
 		for _, m := range r.models {
@@ -247,7 +418,10 @@ func (r *Runtime) handleAt(ctx *schemas.BifrostContext, req *schemas.BifrostRequ
 	if err != nil || len(auth.Pools) == 0 {
 		return provenanceError(403)
 	}
-	p := &Principal{authorization: auth, session: session, delegation: proof, source: *source, deadline: now.Add(60 * time.Second)}
+	if !contains(auth.Pools, routed.Pool) {
+		return provenanceError(403)
+	}
+	p := &Principal{authorization: auth, session: session, delegation: proof, source: *source, original: original, routed: routed, deadline: now.Add(60 * time.Second)}
 	if proof != nil {
 		p.deadline = proof.QueueDeadline()
 		_ = json.Unmarshal(proof.OriginalControls(), &p.controls)
@@ -283,11 +457,19 @@ func (r *Runtime) WrapHTTP(next fasthttp.RequestHandler) fasthttp.RequestHandler
 				return
 			}
 			if r != nil && ctx.IsPost() && (strings.HasSuffix(path, "/chat/completions") || strings.HasSuffix(path, "/responses")) {
-				budget := &nativeBudget{deadline: time.Now().Add(60 * time.Second)}
+				budget := &nativeBudget{deadline: time.Now().Add(60 * time.Second), http: true}
 				if len(ctx.PostBody()) <= maxInferenceBytes {
 					var err error
 					budget.controls, err = extractControls(ctx.PostBody())
 					budget.invalid = err != nil
+					var wire struct {
+						Model string `json:"model"`
+					}
+					if json.Unmarshal(ctx.PostBody(), &wire) == nil && len(wire.Model) <= 513 && strings.TrimSpace(wire.Model) == wire.Model {
+						budget.origin = r.nativeHTTPOrigin(wire.Model)
+					} else {
+						budget.invalid = true
+					}
 				} else {
 					budget.invalid = true
 				}
