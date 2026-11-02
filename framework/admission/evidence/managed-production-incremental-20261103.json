@@ -1,0 +1,374 @@
+{
+  "activated": {
+    "gateway": "6a0d16c38241fcb928426dd2462799bb77a077ca9440595a621cfd977d8a0a42",
+    "bifrost": "c36579edc5e75cc51e59fba4ed12f0a11f896d47ace369b452b6bf3d2d43b0e3",
+    "gateway_image": "sha256:243d60a9e13a4cfe0077a0cccce146440c549c61d53f7f4695036b4f6a321143",
+    "bifrost_image": "sha256:8206f4a3022b40891acc8bb98c743ae6315a8d27516e1d0106de7814b9f197f0",
+    "namespace": "94fb405f-08dc-4046-86dc-d5b975793479",
+    "contract_sha256": "413281474e40e59a1f5c24c001fdb8d4be51a7bfe75ee6af47709ded50166f0f",
+    "user_keys_preserved": true,
+    "current_data_preserved": true,
+    "production_activated": true,
+    "live_model_smoke_pending": true,
+    "route_version": 18
+  },
+  "actual_accounting": {
+    "ledger": [
+      {
+        "request_id": "73c161b0-fa88-496e-a24e-8915996e557e",
+        "model": "sw-qwen3.8-27b",
+        "outcome": "completed",
+        "reserved_units": 84,
+        "actual_units": 21,
+        "input_tokens": 15,
+        "output_tokens": 3
+      },
+      {
+        "request_id": "85b788d8-219c-43a6-8301-a08999c56d77",
+        "model": "sw-qwen3.8-27b",
+        "outcome": "completed",
+        "reserved_units": 84,
+        "actual_units": 21,
+        "input_tokens": 15,
+        "output_tokens": 3
+      }
+    ],
+    "physical": [
+      {
+        "pool_id": "deepseek",
+        "state": "finished",
+        "terminal_reason": "upstream_terminal_confirmed",
+        "count": 21
+      },
+      {
+        "pool_id": "glm",
+        "state": "finished",
+        "terminal_reason": "upstream_terminal_confirmed",
+        "count": 10
+      },
+      {
+        "pool_id": "qwen",
+        "state": "finished",
+        "terminal_reason": "upstream_terminal_confirmed",
+        "count": 19
+      }
+    ],
+    "pending_queue": 0
+  },
+  "native": {
+    "passed": true,
+    "scope": "original server VK/native original governance; not employee OAuth",
+    "calls": [
+      {
+        "requested_model": "gpu2/glm-5.3-flash",
+        "status": 200,
+        "response_model": "glm-5.3-flash",
+        "usage": {
+          "prompt_tokens": 15,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "completion_tokens": 3,
+          "completion_tokens_details": {},
+          "total_tokens": 18
+        },
+        "elapsed_ms": 178
+      },
+      {
+        "requested_model": "gpu1/deepseek-v4.1-flash-1017",
+        "status": 200,
+        "response_model": "deepseek-v4.1-flash-1017",
+        "usage": {
+          "prompt_tokens": 33,
+          "completion_tokens": 14,
+          "completion_tokens_details": {
+            "reasoning_tokens": 10
+          },
+          "total_tokens": 47
+        },
+        "elapsed_ms": 92
+      }
+    ]
+  },
+  "qwen_to_glm": {
+    "passed": true,
+    "qwen_capacity_observed": true,
+    "peak_counts": {
+      "qwen": 16
+    },
+    "overflow_call": {
+      "index": 16,
+      "status": 200,
+      "model": "glm-5.3-flash",
+      "usage": {
+        "prompt_tokens": 18,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0
+        },
+        "completion_tokens": 3,
+        "completion_tokens_details": {},
+        "total_tokens": 21
+      },
+      "elapsed_ms": 190
+    },
+    "source_successes": 16,
+    "source_models": [
+      "qwen3.8-27b"
+    ],
+    "source_total_output_tokens": 6144,
+    "final_active": {},
+    "scope": "original server VK/native governance; not employee OAuth or all-full queue qualification"
+  },
+  "glm_to_ds_and_sticky": {
+    "passed": true,
+    "glm_capacity_observed": true,
+    "peak_counts": {
+      "glm": 8
+    },
+    "overflow_call": {
+      "index": 8,
+      "status": 200,
+      "model": "deepseek-v4.1-flash-1017",
+      "usage": {
+        "prompt_tokens": 36,
+        "completion_tokens": 30,
+        "completion_tokens_details": {
+          "reasoning_tokens": 26
+        },
+        "total_tokens": 66
+      },
+      "elapsed_ms": 190
+    },
+    "same_session_after_glm_idle": {
+      "index": 9,
+      "status": 200,
+      "model": "deepseek-v4.1-flash-1017",
+      "usage": {
+        "prompt_tokens": 36,
+        "completion_tokens": 25,
+        "completion_tokens_details": {
+          "reasoning_tokens": 22
+        },
+        "total_tokens": 61
+      },
+      "elapsed_ms": 155
+    },
+    "source_successes": 8,
+    "source_models": [
+      "glm-5.3-flash"
+    ],
+    "source_total_output_tokens": 3072,
+    "final_active": {},
+    "scope": "original server VK/native governance; not employee OAuth or all-full queue qualification"
+  },
+  "linux_startup": {
+    "passed": true,
+    "actual_images": {
+      "gateway": "sha256:243d60a9e13a4cfe0077a0cccce146440c549c61d53f7f4695036b4f6a321143",
+      "bifrost": "sha256:8206f4a3022b40891acc8bb98c743ae6315a8d27516e1d0106de7814b9f197f0"
+    },
+    "bifrost_user": "1000:0",
+    "group_add": [
+      "10001"
+    ],
+    "actual_runtime_ready": {
+      "protocol": 1,
+      "state": "ready",
+      "namespace": "94fb405f-08dc-4046-86dc-d5b975793479",
+      "contract_sha256": "413281474e40e59a1f5c24c001fdb8d4be51a7bfe75ee6af47709ded50166f0f"
+    },
+    "network": "owned Bifrost network-none; Gateway loopback-only",
+    "model_inference_calls": 0,
+    "directory_mode": "0o750",
+    "socket_mode": "0o660"
+  },
+  "first_failed_attempt_rolled_back": {
+    "current_data_retained": true,
+    "original_ids": [
+      "f93f9342b75e34364180cf3c15cfd0a2abbc78211e85903e2388d18f65424f89",
+      "9e5a21da164a3240d5ffd1c4e8d8591d01260df45c46f332596138195204db39"
+    ]
+  },
+  "backups": {
+    "gateway-fresh.db": {
+      "bytes": 61440,
+      "sha256": "ed1c6f4c0a6ff6b26f7bfab9d42f08afe9668f501352fbd49886967eb94da216"
+    },
+    "llm-postgres.dump": {
+      "bytes": 43938692,
+      "sha256": "932c546a31828e4fb6d0d4c65e233c97d937bbef874404e80e855c2e2720838f"
+    },
+    "bifrost-online.db": {
+      "bytes": 42848256,
+      "sha256": "640e281dd72af530593636782bfde07d07e3ee26f5972544d8ff124fbdf943a5"
+    }
+  },
+  "production_configs": {
+    "bootstrap.json": "03d2c5940b76994d307b2a0fb906bbc626b681dfa14d65ec13a9b71d576dda7b",
+    "model-services.json": "416e807162cd13b269149d0e8e263a1137c8eab7215f7e354ed34a790c3abc8b",
+    "profile.json": "35647d4e2d86eb6127e2ab8457b39c5006c66929f102afae00fa493ff426220e"
+  },
+  "source_dirs": {
+    "operations": "/data/releases/shinewing-managed-cutover/5e669a6262ad1367b757fc3487ee5541765e5872/r2",
+    "live_config": "/data/releases/shinewing-managed-cutover/20aa0a14b7edae32fe1b4ded2b63b1898de6a885/r1"
+  },
+  "scope_limits": [
+    "native overflow uses original server VK, not real employee OAuth",
+    "RAGFlow is real existing dedicated Qwen-only OAuth identity",
+    "no all-full queue, real image adaptation or GPU process abort proof in this release",
+    "original seven P0 categories remain incomplete"
+  ],
+  "shinewing-ai-gateway": {
+    "id": "6a0d16c38241fcb928426dd2462799bb77a077ca9440595a621cfd977d8a0a42",
+    "image": "sha256:243d60a9e13a4cfe0077a0cccce146440c549c61d53f7f4695036b4f6a321143",
+    "started": "2026-11-02T20:07:36.625785705Z",
+    "restarts": 0,
+    "running": true,
+    "restart_policy": {
+      "Name": "unless-stopped",
+      "MaximumRetryCount": 0
+    }
+  },
+  "bifrost": {
+    "id": "c36579edc5e75cc51e59fba4ed12f0a11f896d47ace369b452b6bf3d2d43b0e3",
+    "image": "sha256:8206f4a3022b40891acc8bb98c743ae6315a8d27516e1d0106de7814b9f197f0",
+    "started": "2026-11-02T20:07:37.747086487Z",
+    "restarts": 0,
+    "running": true,
+    "restart_policy": {
+      "Name": "unless-stopped",
+      "MaximumRetryCount": 0
+    }
+  },
+  "deliberate_client_cancel": {
+    "request_id": "86da186d-85e5-4260-b997-d88b318b3eaf",
+    "status": 200,
+    "closed_after_first_sse_before_done": true,
+    "ledger": {
+      "request_id": "86da186d-85e5-4260-b997-d88b318b3eaf",
+      "model": "sw-qwen3.8-27b",
+      "outcome": "completed",
+      "reserved_units": 339,
+      "actual_units": 288,
+      "input_tokens": 32,
+      "output_tokens": 128
+    },
+    "physical_active_after": 0,
+    "scope": "caller deliberately closes first SSE event; sender reaches terminal and releases. Does not prove immediate GPU abortion or durable crash replay; original outcome recorded without forcing client_disconnected"
+  },
+  "real_ragflow_smoke": {
+    "passed": true,
+    "scope": "existing dedicated RAGFlow service identity; Qwen only",
+    "calls": [
+      {
+        "stream": false,
+        "status": 200,
+        "request_id": "85b788d8-219c-43a6-8301-a08999c56d77",
+        "trace": "quick-release-e84c91d0e80c4ce0951a0e1f3166b75f",
+        "usage": {
+          "prompt_tokens": 15,
+          "completion_tokens": 3,
+          "completion_tokens_details": {},
+          "total_tokens": 18
+        }
+      },
+      {
+        "stream": true,
+        "status": 200,
+        "request_id": "73c161b0-fa88-496e-a24e-8915996e557e",
+        "trace": "quick-release-6fb83aca5ad44f64a39209fa05adb66b",
+        "chunks": 4,
+        "done": true
+      }
+    ],
+    "revision": "ee05e1ccad010e9f409345e734895129a288fbeb",
+    "gateway": "6a0d16c38241fcb928426dd2462799bb77a077ca9440595a621cfd977d8a0a42"
+  },
+  "final_health": {
+    "gateway": {
+      "status": 200,
+      "value": {
+        "published_version": 18,
+        "revision": "ee05e1ccad010e9f409345e734895129a288fbeb",
+        "service": "shinewing-ai-gateway",
+        "success": true,
+        "version": "0.5.0"
+      }
+    },
+    "admin": {
+      "status": 200,
+      "value": {
+        "published_version": 18,
+        "service": "shinewing-ai-gateway-admin",
+        "success": true
+      }
+    },
+    "llm": {
+      "status": 200,
+      "value": {
+        "identity_ready": true,
+        "managed_upstream_ready": true,
+        "postgres": true,
+        "process_operations": {
+          "in_use": 1,
+          "limit": 360,
+          "scope": "local_logical_operations_not_gpu_capacity"
+        },
+        "redis": true,
+        "service": "shinewing-llm-access-gateway",
+        "version": "0.5.0"
+      }
+    },
+    "managed_bifrost": {
+      "status": 200,
+      "value": {
+        "protocol": 1,
+        "state": "ready",
+        "namespace": "94fb405f-08dc-4046-86dc-d5b975793479",
+        "contract_sha256": "413281474e40e59a1f5c24c001fdb8d4be51a7bfe75ee6af47709ded50166f0f"
+      }
+    },
+    "anonymous_models": 401
+  },
+  "resolved_failure_statuses": [
+    {
+      "unit": "sw-bifrost-profile-probe-989fe59-r1",
+      "original_state": "Result=exit-code\nExecMainStatus=1\nActiveState=failed\n",
+      "retained_journal_sha256": "8fd1baabf2791e5ef476bfdd1e0ff5e678724245521531d5d8c390e9f12b5607",
+      "resolved_by": "same-source regional build + Linux probe build + fixed directory actual startup + verified r2 activation",
+      "only_this_owned_resolved_status_reset": true
+    },
+    {
+      "unit": "sw-bifrost-profile-probe-796bd5e-r1",
+      "original_state": "Result=exit-code\nExecMainStatus=1\nActiveState=failed\n",
+      "retained_journal_sha256": "5840931b39b64b189da93a4c81ad4213f007621ea1a38abcd53ec94f946b263f",
+      "resolved_by": "same-source regional build + Linux probe build + fixed directory actual startup + verified r2 activation",
+      "only_this_owned_resolved_status_reset": true
+    },
+    {
+      "unit": "sw-bifrost-managed-build-245dfea-r1",
+      "original_state": "Result=signal\nExecMainStatus=15\nActiveState=failed\n",
+      "retained_journal_sha256": "239f4fafd30f56526692ca3c1b9cd42f2fc78ca8b7fac43f3d1793c598604a3e",
+      "resolved_by": "same-source regional build + Linux probe build + fixed directory actual startup + verified r2 activation",
+      "only_this_owned_resolved_status_reset": true
+    },
+    {
+      "unit": "sw-bifrost-profile-probe-245dfea-r1",
+      "original_state": "Result=signal\nExecMainStatus=15\nActiveState=failed\n",
+      "retained_journal_sha256": "1d17c94d6c50acc2639a1675f7f4d77d06c05ebc0aabe84bf9376b7967836011",
+      "resolved_by": "same-source regional build + Linux probe build + fixed directory actual startup + verified r2 activation",
+      "only_this_owned_resolved_status_reset": true
+    },
+    {
+      "unit": "sw-managed-activate-20aa0a1-r1",
+      "original_state": "Result=exit-code\nExecMainStatus=1\nActiveState=failed\n",
+      "retained_journal_sha256": "08550fb718b0aa52e89d492f96352aa8f1ea08b02ac7fbceafd5eab9c02fd378",
+      "resolved_by": "same-source regional build + Linux probe build + fixed directory actual startup + verified r2 activation",
+      "only_this_owned_resolved_status_reset": true
+    }
+  ],
+  "verification_completed_at": "2026-11-03T04:22:35.325917+08:00",
+  "live_model_smoke_completed": true
+}

@@ -1,3 +1,27 @@
+## Current production: joint managed profile enabled, 2026-11-03
+
+Bifrost main245dfea/image8206f4a3 atc36579ed and Gatewayee05e1c/image243d60a9
+at6a0d16c3 are live, both restart0/unless-stopped, route18.
+[Production receipt](evidence/managed-production-incremental-20261103.json) and
+[release/rollback/remaining scope](https://github.com/mastergyp/shinewing-ai-gateway/blob/codex/model-overflow-routing/docs/MODEL-OVERFLOW-PRODUCTION-20261103.md).
+Real RAGFlow Qwen-only OAuth unary/SSE200 and original one-row accounting pass;
+original server VK GLM/DeepSeek native200. Controlled real Qwen16 -> GLM and
+GLM8 -> DeepSeek both return200; same session remains on DeepSeek after GLM
+is idle. Physical occupancy returns0. Deliberate first-SSE caller close still
+reaches terminal and retains full original usage accounting (not instant GPU abort).
+
+First activation failed because private umask077 reduced the shared0750
+parent to0700. It auto-rolled back on current data; both contract hashes matched.
+Explicit0750 fixes the directory without weakening credential privacy. Actual
+Linux images then pass owned Bifrost network-none/Gateway loopback startup with
+UID1000 + GID10001 and0660 socket; fixed coordinator5e669a6 activation passes.
+Regional mirror build delay and first failed operation remain recorded.
+
+Persistent cross-store finance/crash replay, all external producers/native
+identity retirement, real employee/IdP revocation and full DR remain original
+P0 work. This deployment is not that separate financial candidate's migration.
+**All sections below are historical qualification/artifact states.**
+
 2026-11-03 incremental readiness fix: loaded profiles attest exact namespace
 and execution contract at GET /sw/gateway/health (no-store). Unconfigured,
 prototype and closed runtimes return503. Gateway checks this bounded private

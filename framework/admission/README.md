@@ -1,3 +1,8 @@
+Production update2026-11-03: joint managed profile is enabled; Qwen16->GLM
+and GLM8->DeepSeek real capacity spill/stickiness and existing RAGFlow OAuth
+accounting pass. [Current release and limits](PROFILE-STARTUP-20261102.md).
+Earlier qualification states below retain their historical scope.
+
 # Shared physical admission protocol client
 
 Latest joint success qualification: Gateway `e75a3a9` / Bifrost `1c3628a`
