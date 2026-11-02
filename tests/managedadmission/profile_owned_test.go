@@ -98,13 +98,13 @@ func TestOwnedConfiguredProfileThroughActualRustPlanner(t *testing.T) {
 				f := fixtureWithInner(t, false, true, nil, "qwen", fixtureRouting{keylessEmpty: true, aliases: []admission.NativeModelAlias{{Provider: schemas.OpenAI, Model: "gpt-4.1", SourceAlias: "sw-glm"}}, runtimeFactory: factory})
 				base, client := ownedHTTP(t, f)
 				body, _ := json.Marshal(map[string]any{"model": "openai/" + model, "messages": []any{map[string]any{"role": "user", "content": "owned synthetic prompt"}}, "max_completion_tokens": 17, "stream": streaming})
-				path := string(admission.Chat)
+				path := "/openai" + string(admission.Chat)
 				session := ""
 				if expectedPool == "glm" {
 					session = uuid.NewString()
 				}
 				if gateway {
-					path = admission.GatewayPrefix + path
+					path = admission.GatewayPrefix + string(admission.Chat)
 				}
 				req, _ := http.NewRequest("POST", base+path, bytes.NewReader(body))
 				req.Header.Set("Authorization", "Bearer "+vkValue)
