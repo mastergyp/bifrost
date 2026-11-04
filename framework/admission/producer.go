@@ -398,7 +398,11 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 		wire.BindManagedStreamReadDiagnostic(owned, target.Provider)
 		actualRoute = &schemas.ManagedExecutionRoute{Requested: principal.OriginalRoute(), Resolved: schemas.Route{Provider: target.Provider, Model: target.Model}, Foreign: ticket.Lease.Foreign}
 		ctx.SetRoutingInfoSnapshot(actualRoute.RoutingInfo())
-		headers := map[string]string{"X-SW-Admission-Id": operation.ID, "X-SW-Admission-Owner": operation.Owner, "X-SW-Admission-Alias": operation.Alias}
+		// The inference hop is a local Unix socket, not the native GPU HTTP
+		// connection pool. A restarted/idle-expired sender may leave a dead
+		// socket in fasthttp's pool without a read watcher. Never reuse this
+		// socket across inference calls; do not replay an ambiguous POST.
+		headers := map[string]string{"Connection": "close", "X-SW-Admission-Id": operation.ID, "X-SW-Admission-Owner": operation.Owner, "X-SW-Admission-Alias": operation.Alias}
 		p.client.setAuthority(func(k, v string) { headers[k] = v })
 		return headers, nil
 	}

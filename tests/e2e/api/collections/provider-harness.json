@@ -176945,6 +176945,86 @@
           ]
         }
       ]
+    },
+    {
+      "name": "132. Managed Unix sender lifecycle (Shinewing idle socket regression)",
+      "description": "OWNED FIXTURE ONLY. Start TestOwnedManagedUnixLifecycleHarness with SW_MANAGED_UNIX_HARNESS=1 at loopback19487. Each API checks real Producer->Unix HTTP with buffered and SSE output, sender idle-close, sender restart, and accepted POST whose reply is lost. All output is finite synthetic qualification metadata; no model/GPU/production identity or config. Old producer reuses expired UDS sockets and must fail, while accepted POST must remain single-dispatch. Do not point this folder at a production or paid-model server.",
+      "item": [
+        {
+          "name": "openai gpt-4o-mini managed-uds-lifecycle chat/completions idle restart and no replay - Shinewing regression",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"owned\"\n    }\n  ],\n  \"max_tokens\": 1\n}"
+            },
+            "url": "{{baseUrl}}/v1/chat/completions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Owned Unix managed sender survives idle/restart without POST replay', function () {",
+                  "  var text = pm.response.text();",
+                  "  pm.expect(pm.response.code, text).to.eql(200);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.passed, text).to.eql(true);",
+                  "  pm.expect(body.synthetic_cases, text).to.eql(6);",
+                  "  pm.expect(body.real_model_calls, text).to.eql(0);",
+                  "  pm.expect(body.production_connections, text).to.eql(0);",
+                  "  pm.expect(body.replay_allowed, text).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "openai gpt-4o-mini managed-uds-lifecycle responses idle restart and no replay - Shinewing regression",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"input\": \"owned\",\n  \"max_output_tokens\": 1\n}"
+            },
+            "url": "{{baseUrl}}/v1/responses"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Owned Unix managed sender survives idle/restart without POST replay', function () {",
+                  "  var text = pm.response.text();",
+                  "  pm.expect(pm.response.code, text).to.eql(200);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.passed, text).to.eql(true);",
+                  "  pm.expect(body.synthetic_cases, text).to.eql(6);",
+                  "  pm.expect(body.real_model_calls, text).to.eql(0);",
+                  "  pm.expect(body.production_connections, text).to.eql(0);",
+                  "  pm.expect(body.replay_allowed, text).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }
