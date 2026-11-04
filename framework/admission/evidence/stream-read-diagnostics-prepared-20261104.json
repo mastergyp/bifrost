@@ -1,0 +1,27 @@
+{
+  "prepared": true,
+  "candidate": "a53cfe51613e265e09ec0a69f6eebc8ed10fecfe270f2aad1f20b8272ad9014c",
+  "operation": "d373fa76-1f3e-4fec-bfe7-db37799bfe42",
+  "name": "shinewing-bifrost-streamdiag-68a57c4",
+  "source": "c36579edc5e75cc51e59fba4ed12f0a11f896d47ace369b452b6bf3d2d43b0e3",
+  "app_revision": "68a57c41cb9380a321252dd9060eef6529c50dc2",
+  "image": "sha256:72d3c7d7260ee46c48f905a652a3ba7bd7555d5bbc67f64aad4acbd35d0d495a",
+  "ops_revision": "bbfbe31d8ac1886de50ef0c127233da2be4fa510",
+  "candidate_status": "created",
+  "candidate_started": false,
+  "configuration_mounts_environment_preserved": true,
+  "original_running_unchanged": true,
+  "config_online_backup_bytes": 42872832,
+  "config_online_backup_sha256": "da0ef9ae50606585b11010c2e540e5ca86305a653ee9fe81f108b27dbe501314",
+  "activation_authorized_by_this_operation": false,
+  "observed_at": "2026-11-04T05:24:27.980792+00:00",
+  "unit": "sw-bifrost-streamdiag-prepare-bbfbe31-r1",
+  "unit_result": {
+    "MainPID": "0",
+    "Result": "success",
+    "ExecMainStatus": "0"
+  },
+  "private_material_mode": "0600",
+  "app_start_stop_actions": 0,
+  "model_or_store_lifecycle_actions": 0
+}
