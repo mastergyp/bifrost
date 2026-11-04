@@ -1,0 +1,31 @@
+{
+  "at": "2026-11-04T05:15:56.447672+00:00",
+  "revision": "68a57c41cb9380a321252dd9060eef6529c50dc2",
+  "image": "sha256:72d3c7d7260ee46c48f905a652a3ba7bd7555d5bbc67f64aad4acbd35d0d495a",
+  "main_binary_sha256": "1a56bc01bae51e28285e54ce25be58b3cd48909c0426ea576236596571eade48",
+  "archive_sha256": "242ceb98fdc69fcab045023388765a003ce4ae93584d6cd2167dc0d7146358e5",
+  "runtime_base": "sha256:54f62d143c37d5508cd4211d54751e9b686f503b2582bf0ac3e772b596b29520",
+  "runtime_metadata_fields_preserved": [
+    "User",
+    "Entrypoint",
+    "Cmd",
+    "Env",
+    "WorkingDir",
+    "Volumes",
+    "Healthcheck",
+    "ExposedPorts"
+  ],
+  "five_original_actors_unchanged": true,
+  "linux_amd64": true,
+  "unit": "sw-bifrost-streamdiag-build-68a57c4-r1",
+  "unit_result": {
+    "MainPID": "0",
+    "Result": "success",
+    "ExecMainStatus": "0"
+  },
+  "linux_admission_and_stream_utility_tests_passed": true,
+  "production_activated": false,
+  "owned_probe_removed": true,
+  "inference_calls": 0,
+  "keys_changed": 0
+}
