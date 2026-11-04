@@ -1643,3 +1643,175 @@ func TestOwnedManagedIdleHarness(t *testing.T) {
 	defer cancel()
 	server.Shutdown(closeCtx)
 }
+
+func ownedCoreBurstStream(t *testing.T, api API, idle time.Duration, loggers ...schemas.Logger) (*schemas.LLMPluginShortCircuit, *Producer, *schemas.BifrostContext, *ownedManagedTerminalHooks, func(), func()) {
+	t.Helper()
+	release := make(chan struct{})
+	hooks := &ownedManagedTerminalHooks{}
+	var releaseOnce sync.Once
+	allowTerminal := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(allowTerminal)
+	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/health":
+			ready(w)
+		case "/v1/enqueue":
+			var in struct {
+				Request  Request `json:"request"`
+				Deadline int64   `json:"deadline_ms"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			queued(w, in.Request.ID, time.UnixMilli(in.Deadline))
+		case "/v1/poll":
+			var in struct {
+				Request Request `json:"request"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			respond(w, map[string]any{"protocol": 1, "decision": map[string]any{"status": "granted", "lease": Lease{ID: in.Request.ID, Pool: "qwen", Engine: "q2", State: "prepared"}}})
+		case "/v1/cancel":
+			respond(w, map[string]any{"protocol": 1, "never_dispatched": false})
+		case "/inference" + string(api):
+			hooks.inferenceCalls.Add(1)
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(200)
+			w.(http.Flusher).Flush()
+			for i := 0; i < schemas.DefaultStreamBufferSize*3; i++ {
+				if api == Chat {
+					fmt.Fprint(w, "data: {\"id\":\"owned\",\"object\":\"chat.completion.chunk\",\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"x\"},\"finish_reason\":null}]}\n\n")
+				} else {
+					fmt.Fprintf(w, "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":%d,\"item_id\":\"owned\",\"output_index\":0,\"content_index\":0,\"delta\":\"x\"}\n\n", i)
+				}
+			}
+			w.(http.Flusher).Flush()
+			<-release
+			if api == Chat {
+				fmt.Fprint(w, "data: {\"id\":\"owned\",\"object\":\"chat.completion.chunk\",\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":2,\"total_tokens\":7}}\n\ndata: [DONE]\n\n")
+			} else {
+				fmt.Fprint(w, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"owned\",\"object\":\"response\",\"model\":\"qwen\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":5,\"output_tokens\":2,\"total_tokens\":7}}}\n\n")
+			}
+		default:
+			t.Error("unexpected owned route")
+			w.WriteHeader(500)
+		}
+	})
+	logger := bifrost.NewNoOpLogger()
+	if len(loggers) != 0 {
+		logger = loggers[0]
+	}
+	producer, err := NewProducer(client, selectedIdlePolicy{idle}, []schemas.ModelProvider{"gpu0"}, 1, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actualCore, err := bifrost.Init(context.Background(), schemas.BifrostConfig{Account: ownedManagedAccount{}, Logger: logger, LLMPlugins: []schemas.LLMPlugin{hooks}, ManagedInference: producer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := nativeGrantContext("owned-vk", "owned-user", nativePermits(false))
+	principal := &Principal{original: schemas.Route{Provider: "gpu0", Model: "qwen"}, routed: ModelTarget{Pool: "qwen", Provider: "gpu0", Model: "qwen"}, source: RuntimeModel{Alias: "sw-qwen", ModelTarget: ModelTarget{Pool: "qwen", Provider: "gpu0", Model: "qwen"}}, authorization: NativeAuthorization{SubjectHash: strings.Repeat("a", 64), Pools: []string{"qwen"}}, deadline: time.Now().Add(3 * time.Second)}
+	ctx.SetValue(principalKey, principal)
+	ctx.SetValue(schemas.BifrostContextKeyStreamIdleTimeout, time.Nanosecond)
+	req := &schemas.BifrostRequest{RequestType: schemas.ChatCompletionStreamRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: "gpu0", Model: "qwen", Input: []schemas.ChatMessage{{Role: "user", Content: &schemas.ChatMessageContent{ContentStr: new("owned")}}}}}
+	if api == Responses {
+		req = &schemas.BifrostRequest{RequestType: schemas.ResponsesStreamRequest, ResponsesRequest: &schemas.BifrostResponsesRequest{Provider: "gpu0", Model: "qwen"}}
+		if err := json.Unmarshal([]byte(`[{"role":"user","content":[{"type":"input_text","text":"owned"}]}]`), &req.ResponsesRequest.Input); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out := &schemas.LLMPluginShortCircuit{}
+	if api == Chat {
+		out.Stream, out.Error = actualCore.ChatCompletionStreamRequest(ctx, req.ChatRequest)
+	} else {
+		out.Stream, out.Error = actualCore.ResponsesStreamRequest(ctx, req.ResponsesRequest)
+	}
+	if out == nil || out.Error != nil || out.Stream == nil {
+		t.Fatalf("owned dispatch rejected before timing check: %+v", out.Error)
+	}
+	return out, producer, ctx, hooks, allowTerminal, func() {
+		allowTerminal()
+		ctx.Cancel()
+		for range out.Stream {
+		}
+		actualCore.Shutdown()
+	}
+}
+
+// This account cannot contact a native model; the selected producer owns all I/O.
+type ownedManagedAccount struct{}
+
+func (ownedManagedAccount) GetConfiguredProviders() ([]schemas.ModelProvider, error) {
+	return []schemas.ModelProvider{"gpu0"}, nil
+}
+func (ownedManagedAccount) GetKeysForProvider(context.Context, schemas.ModelProvider) ([]schemas.Key, error) {
+	return nil, nil
+}
+func (ownedManagedAccount) GetConfigForProvider(schemas.ModelProvider) (*schemas.ProviderConfig, error) {
+	return &schemas.ProviderConfig{ConcurrencyAndBufferSize: schemas.ConcurrencyAndBufferSize{Concurrency: 1, BufferSize: 1}, CustomProviderConfig: &schemas.CustomProviderConfig{BaseProviderType: schemas.OpenAI, IsKeyLess: true}, NetworkConfig: schemas.NetworkConfig{BaseURL: "http://127.0.0.1:1", MaxRetries: 0}}, nil
+}
+
+type ownedManagedTerminalHooks struct {
+	inferenceCalls atomic.Int64
+	calls          atomic.Int64
+	tokens         atomic.Int64
+}
+
+func (*ownedManagedTerminalHooks) GetName() string { return "owned-managed-terminal" }
+func (*ownedManagedTerminalHooks) Cleanup() error  { return nil }
+func (*ownedManagedTerminalHooks) PreRequestHook(*schemas.BifrostContext, *schemas.BifrostRequest) error {
+	return nil
+}
+func (*ownedManagedTerminalHooks) PreLLMHook(_ *schemas.BifrostContext, r *schemas.BifrostRequest) (*schemas.BifrostRequest, *schemas.LLMPluginShortCircuit, error) {
+	return r, nil, nil
+}
+func (h *ownedManagedTerminalHooks) PostLLMHook(ctx *schemas.BifrostContext, r *schemas.BifrostResponse, e *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError, error) {
+	if bifrost.IsFinalChunk(ctx) {
+		h.calls.Add(1)
+		if r != nil {
+			if r.ChatResponse != nil && r.ChatResponse.Usage != nil {
+				h.tokens.Add(int64(r.ChatResponse.Usage.TotalTokens))
+			}
+			if r.ResponsesStreamResponse != nil && r.ResponsesStreamResponse.Response != nil && r.ResponsesStreamResponse.Response.Usage != nil {
+				h.tokens.Add(int64(r.ResponsesStreamResponse.Response.Usage.TotalTokens))
+			}
+		}
+	}
+	return r, e, nil
+}
+
+// Real Core + managed Producer + Unix HTTP sender/SSE. Downstream abandonment
+// drains through the original terminal/accounting hook; it does not cancel
+// known native work or pretend that disconnect has ended GPU execution.
+func TestManagedCoreDrainsCallerCancellationWithoutLosingTerminalUsage(t *testing.T) {
+	for _, api := range []API{Chat, Responses} {
+		t.Run(string(api), func(t *testing.T) {
+			out, producer, ctx, hooks, allowTerminal, cleanup := ownedCoreBurstStream(t, api, time.Second)
+			defer cleanup()
+			select {
+			case <-out.Stream:
+			case <-time.After(time.Second):
+				t.Fatal("first synthetic chunk missing")
+			}
+			// Stop reading and let the two forwarding buffers apply backpressure.
+			time.Sleep(30 * time.Millisecond)
+			ctx.Cancel()
+			time.Sleep(30 * time.Millisecond)
+			if producer.ActiveOperations() != 1 || hooks.calls.Load() != 0 {
+				t.Fatal("caller cancellation released native ownership before terminal")
+			}
+			allowTerminal()
+			deadline := time.Now().Add(2 * time.Second)
+			for (producer.ActiveOperations() != 0 || hooks.calls.Load() != 1 || hooks.tokens.Load() != 7) && time.Now().Before(deadline) {
+				time.Sleep(time.Millisecond)
+			}
+			if producer.ActiveOperations() != 0 || hooks.calls.Load() != 1 || hooks.tokens.Load() != 7 {
+				t.Fatalf("abandoned caller stranded permit or lost terminal usage: active=%d final=%d tokens=%d", producer.ActiveOperations(), hooks.calls.Load(), hooks.tokens.Load())
+			}
+			if hooks.inferenceCalls.Load() != 1 {
+				t.Fatal("original native request replayed")
+			}
+			if !producer.enter() {
+				t.Fatal("completed original producer slot not reusable")
+			}
+			producer.leave()
+		})
+	}
+}

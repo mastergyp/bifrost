@@ -1,0 +1,38 @@
+{
+  "base_revision": "32298279f33361abf5eea848b450b4ee8cb5a6da",
+  "production_runtime": "f62712c3085b7ea208b9e8aa6db2a1a5f509898a",
+  "test": "TestManagedCoreDrainsCallerCancellationWithoutLosingTerminalUsage",
+  "api_cases": [
+    "Chat",
+    "Responses"
+  ],
+  "repeat_count_each_api": 25,
+  "actual_core_and_producer": true,
+  "actual_unix_http_sender_and_sse_decoder": true,
+  "caller_stopped_reading_and_cancelled": true,
+  "permit_retained_until_sender_terminal": true,
+  "terminal_post_hook_count_each_request": 1,
+  "actual_synthetic_usage_tokens_each_request": 7,
+  "original_sender_calls_each_request": 1,
+  "permit_reusable_after_terminal": true,
+  "native_gpu_cancellation_qualified": false,
+  "sender_migrated_out_of_gateway": false,
+  "runtime_code_changed": false,
+  "production_mutated": false,
+  "live_provider_harness_exempt_reason": "test-only qualification; no wire behavior change",
+  "qualification_logs": {
+    "repeat_25_each_api": {
+      "sha256": "5cb121a30e95a6dfb9816c4b32ed12e3c441ecdfda98dd9c9deb03ebfdb3dc38",
+      "result": "ok  \tgithub.com/maximhq/bifrost/framework/admission\t3.461s"
+    },
+    "admission_regression": {
+      "sha256": "9f0ee91e5fca31ebc49e72a33916a6c25c3ea601ebac0eb82bd9a35c4337896e",
+      "result": "ok  \tgithub.com/maximhq/bifrost/framework/admission\t1.085s"
+    },
+    "race_5_each_api": {
+      "sha256": "4deb1ef41fe08ae73ca432a30b496caf0e1fe2335fdd3dbebf76bda693654cc7",
+      "result": "ok  \tgithub.com/maximhq/bifrost/framework/admission\t4.192s"
+    }
+  },
+  "runtime_fix_red_green": "not applicable: production-path qualification passed unchanged runtime; low-level Producer-only experiment excluded as missing Core consumer"
+}
