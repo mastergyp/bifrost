@@ -18,21 +18,39 @@ RUN case "$APK_MIRROR" in \
 WORKDIR /build
 ENV CGO_ENABLED=1 GOOS=linux
 ARG GOPROXY=https://proxy.golang.org,direct
-COPY core/ ./core/
-COPY framework/ ./framework/
-COPY plugins/ ./plugins/
-COPY transports/ ./transports/
+# Module manifests alone key dependency downloads; runtime edits must not duplicate them.
+COPY core/go.mod core/go.sum ./core/
+COPY framework/go.mod framework/go.sum ./framework/
+COPY transports/go.mod transports/go.sum ./transports/
+COPY plugins/compat/go.mod plugins/compat/go.sum ./plugins/compat/
+COPY plugins/governance/go.mod plugins/governance/go.sum ./plugins/governance/
+COPY plugins/jsonparser/go.mod plugins/jsonparser/go.sum ./plugins/jsonparser/
+COPY plugins/logging/go.mod plugins/logging/go.sum ./plugins/logging/
+COPY plugins/maxim/go.mod plugins/maxim/go.sum ./plugins/maxim/
+COPY plugins/mocker/go.mod plugins/mocker/go.sum ./plugins/mocker/
+COPY plugins/modelcatalogresolver/go.mod plugins/modelcatalogresolver/go.sum ./plugins/modelcatalogresolver/
+COPY plugins/otel/go.mod plugins/otel/go.sum ./plugins/otel/
+COPY plugins/prompts/go.mod plugins/prompts/go.sum ./plugins/prompts/
+COPY plugins/routing/go.mod plugins/routing/go.sum ./plugins/routing/
+COPY plugins/semanticcache/go.mod plugins/semanticcache/go.sum ./plugins/semanticcache/
+COPY plugins/telemetry/go.mod plugins/telemetry/go.sum ./plugins/telemetry/
 RUN go work init && go work use ./core ./framework ./transports && \
     for plugin_dir in ./plugins/*/; do \
       if [ -f "$plugin_dir/go.mod" ]; then go work use "$plugin_dir" || exit 1; fi; \
     done
 # No cloud credentials, production data, model mounts or runtime configuration.
 RUN cd core && go mod download all
+
+FROM build-dependencies AS build-source
+COPY core/ ./core/
+COPY framework/ ./framework/
+COPY plugins/ ./plugins/
+COPY transports/ ./transports/
 # Incremental managed-routing release: relevant local protocol regressions,
 # no provider-wide/GPU/paid API suite. Full historic qualification is retained.
 RUN --network=none cd framework && go test -p 2 ./admission
-RUN --network=none cd core && go test -p 2 ./providers/utils -run 'TestProcessAndSendErrorBoundedDiagnostic|TestIdleReaderEmitsBoundedDiagnostic|Test.*(SSE|IdleTimeoutReader|StreamTruncated)'
-FROM build-dependencies AS builder
+RUN --network=none cd core && go test -p 2 ./providers/utils -run 'TestProcessAndSendErrorBoundedDiagnostic|TestIdleReaderEmitsBoundedDiagnostic|TestIdleDiagnostic|TestReadDiagnostic|Test.*(SSE|IdleTimeoutReader|StreamTruncated)'
+FROM build-source AS builder
 COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
 RUN --network=none cd transports && go test -p 2 ./bifrost-http/server -run 'TestManaged(StreamPolicy|Startup)'
 ARG SOURCE_REVISION
@@ -42,7 +60,7 @@ RUN test -n "$SOURCE_REVISION" && cd transports && \
 
 # Optional Linux/cross-UID qualification artifact. The ordinary release build
 # does not execute or include this probe; it has no real users or credentials.
-FROM build-dependencies AS qualification-builder
+FROM build-source AS qualification-builder
 COPY tests/managedadmission/ ./tests/managedadmission/
 RUN cd tests/managedadmission && GOWORK=off go mod download all
 RUN --network=none cd tests/managedadmission && GOWORK=off go test -p 2 -c -tags sqlite_static -o /app/profile-probe.test .

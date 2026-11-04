@@ -3349,6 +3349,17 @@ func closeBodyStream(bodyStream io.Reader, err error) {
 // idleTimeoutReader wraps an io.Reader and closes the underlying body stream
 // if no data arrives within the configured timeout. This unblocks any pending
 // Read() call on the wrapped reader.
+type streamReadDiagnosticKey struct{}
+
+// Only finite progress/phase state. No bytes, messages, IDs or model names.
+// The key is package-private, so request metadata cannot supply this state.
+type streamReadDiagnostic struct {
+	started  atomic.Bool
+	reading  atomic.Bool
+	progress atomic.Bool
+	phase    atomic.Uint32 // 1=blocked read, 2=between reads, 3=not started
+}
+
 type idleTimeoutReader struct {
 	ctx           *schemas.BifrostContext
 	reader        io.Reader
@@ -3360,6 +3371,7 @@ type idleTimeoutReader struct {
 	timerDoneOnce sync.Once
 	timerDone     chan struct{}
 	fired         atomic.Bool // set true when the idle timer fires
+	diagnostic    *streamReadDiagnostic
 }
 
 // NewIdleTimeoutReader wraps reader with idle detection. If reader.Read() returns
@@ -3396,6 +3408,10 @@ func NewIdleTimeoutReader(reader io.Reader, bodyStream io.Reader, timeout time.D
 		bodyStream: bodyStream,
 		timeout:    timeout,
 		timerDone:  make(chan struct{}),
+		diagnostic: &streamReadDiagnostic{},
+	}
+	if ctx != nil {
+		ctx.SetValue(streamReadDiagnosticKey{}, r.diagnostic)
 	}
 	r.timer = time.AfterFunc(timeout, func() {
 		defer r.timerDoneOnce.Do(func() { close(r.timerDone) })
@@ -3411,6 +3427,13 @@ func NewIdleTimeoutReader(reader io.Reader, bodyStream io.Reader, timeout time.D
 					return
 				}
 			}
+			phase := uint32(2)
+			if r.diagnostic.reading.Load() {
+				phase = 1
+			} else if !r.diagnostic.started.Load() {
+				phase = 3
+			}
+			r.diagnostic.phase.Store(phase)
 			r.fired.Store(true)
 			// closeBodyStream may panic: an orphaned timer can fire after the
 			// stream's connection has already been released to / reused from
@@ -3475,7 +3498,18 @@ func (r *idleTimeoutReader) Read(p []byte) (n int, err error) {
 		return 0, r.closedReadError()
 	}
 	readStart := time.Now()
+	if r.diagnostic != nil {
+		r.diagnostic.started.Store(true)
+		r.diagnostic.reading.Store(true)
+		defer r.diagnostic.reading.Store(false)
+	}
 	n, err = r.reader.Read(p)
+	if r.diagnostic != nil {
+		r.diagnostic.reading.Store(false)
+		if n > 0 {
+			r.diagnostic.progress.Store(true)
+		}
+	}
 	if r.ctx != nil {
 		schemas.AddUpstreamLatency(r.ctx, time.Since(readStart))
 	}
@@ -3720,7 +3754,35 @@ func ProcessAndSendError(
 	// Operators can count these events without reading the legacy error message,
 	// which may contain provider content. Never add request bodies/keys as fields.
 	if logger != nil {
-		logger.LogHTTPRequest(schemas.LogLevelWarn, "bifrost_stream_read_failure").Str("code", streamReadDiagnosticCode(err)).Send()
+		event := logger.LogHTTPRequest(schemas.LogLevelWarn, "bifrost_stream_read_failure").Str("code", streamReadDiagnosticCode(err))
+		if ctx != nil {
+			if route, ok := ctx.Value(schemas.BifrostContextKeyRoutingInfo).(schemas.RoutingInfo); ok {
+				// These are the operator-owned managed providers, stamped only
+				// after selected target/funding validation. Never log Model/Key
+				// or arbitrary provider names from another deployment/request.
+				switch route.Provider {
+				case "gpu0", "gpu1", "gpu2":
+					event.Str("selected_provider", string(route.Provider))
+					if state, ok := ctx.Value(streamReadDiagnosticKey{}).(*streamReadDiagnostic); ok && errors.Is(err, ErrStreamIdleTimeout) {
+						phase := "unknown"
+						switch state.phase.Load() {
+						case 1:
+							phase = "read_blocked"
+						case 2:
+							phase = "between_reads"
+						case 3:
+							phase = "not_started"
+						}
+						progress := "none"
+						if state.progress.Load() {
+							progress = "some"
+						}
+						event.Str("idle_phase", phase).Str("read_progress", progress)
+					}
+				}
+			}
+		}
+		event.Send()
 	}
 	// Send scanner error through channel
 	bifrostError := &schemas.BifrostError{

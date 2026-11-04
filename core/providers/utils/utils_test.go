@@ -3810,3 +3810,59 @@ func TestIdleReaderEmitsBoundedDiagnostic(t *testing.T) {
 		t.Fatalf("bad diagnostic: %#v", logger.fields)
 	}
 }
+
+func TestIdleDiagnosticSelectedProviderAndReadPhase(t *testing.T) {
+	for _, between := range []bool{false, true} {
+		t.Run(fmt.Sprint(between), func(t *testing.T) {
+			parent := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+			defer parent.Cancel()
+			primary := schemas.ModelProvider("gpu0")
+			parent.SetRoutingInfoSnapshot(schemas.RoutingInfo{Provider: "gpu1", PrimaryProvider: &primary, Model: "private-model-must-not-log"})
+			ctx := schemas.NewBifrostContext(context.WithoutCancel(parent), schemas.NoDeadline)
+			defer ctx.Cancel()
+			reader, writer := io.Pipe()
+			defer writer.Close()
+			idle, stop := NewIdleTimeoutReader(reader, reader, 25*time.Millisecond, ctx)
+			defer stop()
+			if between {
+				go func() { _, _ = writer.Write([]byte("x")) }()
+				if n, err := idle.Read(make([]byte, 1)); n != 1 || err != nil {
+					t.Fatalf("initial progress: %d %v", n, err)
+				}
+				time.Sleep(60 * time.Millisecond)
+			}
+			_, err := idle.Read(make([]byte, 1))
+			if !errors.Is(err, ErrStreamIdleTimeout) {
+				t.Fatalf("expected idle, got %v", err)
+			}
+			logger := &failureDiagnosticLogger{}
+			ch := make(chan *schemas.BifrostStreamChunk, 1)
+			ProcessAndSendError(ctx, func(_ *schemas.BifrostContext, r *schemas.BifrostResponse, e *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError) {
+				return r, e
+			}, err, ch, logger, nil)
+			<-ch
+			phase, progress := "read_blocked", "none"
+			if between {
+				phase, progress = "between_reads", "some"
+			}
+			if logger.fields["selected_provider"] != "gpu1" || logger.fields["idle_phase"] != phase || logger.fields["read_progress"] != progress || len(logger.fields) != 5 {
+				t.Fatalf("missing selected-provider/reader metadata: %#v", logger.fields)
+			}
+		})
+	}
+}
+
+func TestReadDiagnosticDoesNotLogUnknownProviderOrPrivateModel(t *testing.T) {
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	defer ctx.Cancel()
+	ctx.SetRoutingInfoSnapshot(schemas.RoutingInfo{Provider: "synthetic-private-provider", Model: "synthetic-private-model"})
+	logger := &failureDiagnosticLogger{}
+	ch := make(chan *schemas.BifrostStreamChunk, 1)
+	ProcessAndSendError(ctx, func(_ *schemas.BifrostContext, r *schemas.BifrostResponse, e *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError) {
+		return r, e
+	}, io.ErrUnexpectedEOF, ch, logger, nil)
+	<-ch
+	if len(logger.fields) != 2 {
+		t.Fatalf("private model/provider data escaped: %#v", logger.fields)
+	}
+}
