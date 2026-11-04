@@ -1815,3 +1815,202 @@ func TestManagedCoreDrainsCallerCancellationWithoutLosingTerminalUsage(t *testin
 		})
 	}
 }
+
+// A real Unix HTTP peer may close its idle socket or restart before Bifrost.
+// This fixture never contacts a model; accepted POSTs are counted exactly.
+func TestManagedProducerUnixConnectionLifecycle(t *testing.T) {
+	for _, api := range []API{Chat, Responses} {
+		for _, streaming := range []bool{false, true} {
+			for _, scenario := range []string{"idle-close", "restart", "late-close-no-replay"} {
+				t.Run(fmt.Sprintf("%s/stream=%v/%s", api, streaming, scenario), func(t *testing.T) { ownedManagedUnixLifecycle(t, api, streaming, scenario) })
+			}
+		}
+	}
+}
+func ownedManagedUnixLifecycle(t *testing.T, api API, streaming bool, scenario string) {
+	t.Helper()
+
+	dir, e := os.MkdirTemp("", "sw-uds-")
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer os.RemoveAll(dir)
+	socket := filepath.Join(dir, "control.sock")
+	var calls, closedRequest atomic.Int32
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/health":
+			ready(w)
+		case "/v1/enqueue":
+			var in struct {
+				Request  Request `json:"request"`
+				Deadline int64   `json:"deadline_ms"`
+			}
+			if json.NewDecoder(r.Body).Decode(&in) != nil {
+				t.Error("owned enqueue")
+				return
+			}
+			queued(w, in.Request.ID, time.UnixMilli(in.Deadline))
+		case "/v1/poll":
+			var in struct {
+				Request Request `json:"request"`
+			}
+			if json.NewDecoder(r.Body).Decode(&in) != nil {
+				t.Error("owned poll")
+				return
+			}
+			respond(w, map[string]any{"protocol": 1, "decision": map[string]any{"status": "granted", "lease": Lease{ID: in.Request.ID, Pool: "qwen", Engine: "q2", State: "prepared"}}})
+		case "/v1/cancel":
+			respond(w, map[string]any{"protocol": 1, "never_dispatched": false})
+		case "/inference" + string(api):
+			calls.Add(1)
+			if r.Close {
+				closedRequest.Add(1)
+			}
+			_, _ = io.Copy(io.Discard, r.Body)
+			if scenario == "late-close-no-replay" {
+				conn, _, err := w.(http.Hijacker).Hijack()
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				_ = conn.Close()
+				return
+			}
+			if streaming {
+				w.Header().Set("Content-Type", "text/event-stream")
+				if api == Chat {
+					fmt.Fprint(w, "data: {\"id\":\"owned\",\"object\":\"chat.completion.chunk\",\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+				} else {
+					fmt.Fprint(w, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"owned\",\"object\":\"response\",\"model\":\"qwen\",\"status\":\"completed\",\"output\":[]}}\n\n")
+				}
+			} else if api == Chat {
+				respond(w, map[string]any{"id": "owned", "object": "chat.completion", "model": "qwen", "choices": []any{map[string]any{"index": 0, "message": map[string]any{"role": "assistant", "content": "ok"}, "finish_reason": "stop"}}})
+			} else {
+				respond(w, map[string]any{"id": "owned", "object": "response", "model": "qwen", "status": "completed", "output": []any{}})
+			}
+		default:
+			t.Error("unexpected owned route")
+			w.WriteHeader(500)
+		}
+	})
+	start := func() *http.Server {
+		ln, err := net.Listen("unix", socket)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := &http.Server{Handler: handler, ReadHeaderTimeout: time.Second, IdleTimeout: 20 * time.Millisecond}
+		go func() { _ = s.Serve(ln) }()
+		return s
+	}
+	server := start()
+	defer func() { _ = server.Close() }()
+	client, err := New(socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	producer, err := NewProducer(client, selectedIdlePolicy{time.Second}, []schemas.ModelProvider{"gpu0"}, 2, bifrost.NewNoOpLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer producer.Close()
+	invoke := func() *schemas.LLMPluginShortCircuit {
+		ctx := nativeGrantContext("owned-vk", "owned-user", nativePermits(false))
+		defer ctx.Cancel()
+		ctx.SetValue(principalKey, &Principal{source: RuntimeModel{Alias: "sw-qwen", ModelTarget: ModelTarget{Pool: "qwen", Provider: "gpu0", Model: "qwen"}}, authorization: NativeAuthorization{SubjectHash: strings.Repeat("a", 64), Pools: []string{"qwen"}}, deadline: time.Now().Add(3 * time.Second)})
+		req := &schemas.BifrostRequest{RequestType: schemas.ChatCompletionRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: "gpu0", Model: "qwen", Input: []schemas.ChatMessage{{Role: "user", Content: &schemas.ChatMessageContent{ContentStr: new("owned")}}}}}
+		if streaming {
+			req.RequestType = schemas.ChatCompletionStreamRequest
+		}
+		if api == Responses {
+			req = &schemas.BifrostRequest{RequestType: schemas.ResponsesRequest, ResponsesRequest: &schemas.BifrostResponsesRequest{Provider: "gpu0", Model: "qwen"}}
+			if streaming {
+				req.RequestType = schemas.ResponsesStreamRequest
+			}
+			if json.Unmarshal([]byte(`[{"role":"user","content":[{"type":"input_text","text":"owned"}]}]`), &req.ResponsesRequest.Input) != nil {
+				t.Fatal("owned input")
+			}
+		}
+		out := producer.Handle(ctx, req)
+		if out != nil && out.Stream != nil {
+			for c := range out.Stream {
+				if c.BifrostError != nil {
+					t.Error("owned SSE error")
+				}
+			}
+		}
+		return out
+	}
+	first := invoke()
+	if scenario == "late-close-no-replay" {
+		if first == nil || first.Error == nil || calls.Load() != 1 {
+			t.Fatal("accepted POST replayed or failure hidden")
+		}
+		return
+	}
+	if first == nil || first.Error != nil {
+		t.Fatal("first owned request failed")
+	}
+	if scenario == "restart" {
+		_ = server.Close()
+		_ = os.Remove(socket)
+		server = start()
+	}
+	time.Sleep(100 * time.Millisecond)
+	second := invoke()
+	if second == nil || second.Error != nil {
+		t.Fatal("next owned request reused an expired Unix HTTP socket")
+	}
+	if calls.Load() != 2 || closedRequest.Load() != 2 {
+		t.Fatalf("one fresh internal inference socket per call required; calls=%d close=%d", calls.Load(), closedRequest.Load())
+	}
+}
+
+// Only an explicitly started loopback harness companion exposes this route.
+// It returns synthetic qualification metadata, never a model response.
+func TestOwnedManagedUnixLifecycleHarness(t *testing.T) {
+	if os.Getenv("SW_MANAGED_UNIX_HARNESS") != "1" {
+		t.Skip("explicit owned loopback harness companion only")
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:19487")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var requests atomic.Int32
+	complete := make(chan struct{}, 1)
+	server := &http.Server{ReadHeaderTimeout: time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		api := API(r.URL.Path)
+		if r.Method != "POST" || (api != Chat && api != Responses) {
+			w.WriteHeader(404)
+			return
+		}
+		n := requests.Add(1)
+		if n > 2 {
+			w.WriteHeader(429)
+			return
+		}
+		defer func() {
+			if n == 2 {
+				complete <- struct{}{}
+			}
+		}()
+		passed := true
+		for _, streaming := range []bool{false, true} {
+			for _, scenario := range []string{"idle-close", "restart", "late-close-no-replay"} {
+				passed = t.Run(fmt.Sprintf("harness%s/stream=%v/%s", api, streaming, scenario), func(t *testing.T) { ownedManagedUnixLifecycle(t, api, streaming, scenario) }) && passed
+			}
+		}
+		if !passed {
+			w.WriteHeader(500)
+		}
+		respond(w, map[string]any{"passed": passed, "synthetic_cases": 6, "real_model_calls": 0, "production_connections": 0, "replay_allowed": false})
+	})}
+	go func() { _ = server.Serve(ln) }()
+	select {
+	case <-complete:
+	case <-time.After(60 * time.Second):
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_ = server.Shutdown(ctx)
+}

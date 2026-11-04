@@ -1,0 +1,56 @@
+{
+  "scope": "owned real Unix HTTP service and actual managed Producer; no production connections or GPU calls",
+  "red_idle_or_restart_failures": 8,
+  "red_ambiguous_accepted_post_no_replay_passes": 4,
+  "green_scenarios": 12,
+  "green_complete_repetitions": 5,
+  "race_complete_repetitions": 2,
+  "full_admission_regression_passed": true,
+  "provider_harness_structural_cases": 2,
+  "owned_http_companion": [
+    {
+      "api": "chat/completions",
+      "status": 200,
+      "passed": true,
+      "production_connections": 0,
+      "real_model_calls": 0,
+      "replay_allowed": false,
+      "synthetic_cases": 6
+    },
+    {
+      "api": "responses",
+      "status": 200,
+      "passed": true,
+      "production_connections": 0,
+      "real_model_calls": 0,
+      "replay_allowed": false,
+      "synthetic_cases": 6
+    }
+  ],
+  "runtime_change": "Server-owned Connection: close on managed Unix inference hop only; no retry; native HTTP pool unchanged",
+  "production_deployed": false,
+  "native_termination_not_certified_from_error_type": true,
+  "log_evidence": {
+    "/tmp/sw-uds-lifecycle-red.log": {
+      "sha256": "300fd4dfd661017def010f35cfbc38bca2cf83f85604620a6aea1665ca269ef8"
+    },
+    "/tmp/sw-uds-lifecycle-green.log": {
+      "sha256": "bdb48861920e8f2a784fce08de9f0e7153dc8cd155828172dd6f2ebedd8452df"
+    },
+    "/tmp/sw-uds-lifecycle-green-repeat.log": {
+      "sha256": "3c1f2455ec46054cc8a26ca642ba2ce878c02647c011a38aff763287ebc63b35"
+    },
+    "/tmp/sw-uds-lifecycle-race.log": {
+      "sha256": "a8e95ee26bead8345cf38775699f843ee83dff4777d822286ceb93edea78c5cb"
+    },
+    "/tmp/sw-uds-lifecycle-admission.log": {
+      "sha256": "8f736361a9f39e28465ea88b198ddc01c72856b7de5c38125038603f9ccbae3f"
+    },
+    "/tmp/sw-uds-owned-http-harness.log": {
+      "sha256": "7ed7b75db8413a95b02af96ebd5087a8b1f256997e07f1356671d4eaa825e882"
+    },
+    "/tmp/sw-uds-harness-structural.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}
