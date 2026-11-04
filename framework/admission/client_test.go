@@ -1486,7 +1486,7 @@ func TestManagedProducerUsesSelectedIdleTimeout(t *testing.T) {
 	}
 }
 
-func ownedSelectedIdleStream(t *testing.T, api API, idle time.Duration) (*schemas.LLMPluginShortCircuit, func()) {
+func ownedSelectedIdleStream(t *testing.T, api API, idle time.Duration, loggers ...schemas.Logger) (*schemas.LLMPluginShortCircuit, func()) {
 	t.Helper()
 	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -1522,7 +1522,11 @@ func ownedSelectedIdleStream(t *testing.T, api API, idle time.Duration) (*schema
 			w.WriteHeader(500)
 		}
 	})
-	producer, err := NewProducer(client, selectedIdlePolicy{idle}, []schemas.ModelProvider{"gpu0"}, 4, bifrost.NewNoOpLogger())
+	logger := bifrost.NewNoOpLogger()
+	if len(loggers) != 0 {
+		logger = loggers[0]
+	}
+	producer, err := NewProducer(client, selectedIdlePolicy{idle}, []schemas.ModelProvider{"gpu0"}, 4, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1542,6 +1546,48 @@ func ownedSelectedIdleStream(t *testing.T, api API, idle time.Duration) (*schema
 		t.Fatal("owned dispatch rejected before timing check")
 	}
 	return out, func() { ctx.Cancel(); producer.Close() }
+}
+
+type ownedStreamDiagnosticLogger struct {
+	schemas.Logger
+	events chan map[string]string
+}
+
+func (l *ownedStreamDiagnosticLogger) LogHTTPRequest(_ schemas.LogLevel, event string) schemas.LogEventBuilder {
+	return &ownedStreamDiagnosticEvent{logger: l, fields: map[string]string{"event": event}}
+}
+
+type ownedStreamDiagnosticEvent struct {
+	logger *ownedStreamDiagnosticLogger
+	fields map[string]string
+}
+
+func (e *ownedStreamDiagnosticEvent) Str(k, v string) schemas.LogEventBuilder {
+	e.fields[k] = v
+	return e
+}
+func (e *ownedStreamDiagnosticEvent) Int(string, int) schemas.LogEventBuilder     { return e }
+func (e *ownedStreamDiagnosticEvent) Int64(string, int64) schemas.LogEventBuilder { return e }
+func (e *ownedStreamDiagnosticEvent) Send()                                       { e.logger.events <- e.fields }
+
+func TestManagedProducerRetainsOwnedStreamDiagnostic(t *testing.T) {
+	for _, api := range []API{Chat, Responses} {
+		t.Run(string(api), func(t *testing.T) {
+			logger := &ownedStreamDiagnosticLogger{Logger: bifrost.NewNoOpLogger(), events: make(chan map[string]string, 8)}
+			out, cleanup := ownedSelectedIdleStream(t, api, 10*time.Millisecond, logger)
+			defer cleanup()
+			for range out.Stream {
+			}
+			select {
+			case fields := <-logger.events:
+				if fields["event"] != "bifrost_stream_read_failure" || fields["selected_provider"] != "gpu0" || fields["idle_phase"] != "read_blocked" || fields["read_progress"] != "none" || fields["code"] != "stream_idle_timeout" || len(fields) != 5 {
+					t.Fatalf("actual background-owned stream lost selected diagnostic: %#v", fields)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("actual owned stream did not emit read diagnostic")
+			}
+		})
+	}
 }
 
 // A loopback-only, synthetic harness companion. It has no production config,

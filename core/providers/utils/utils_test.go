@@ -3866,3 +3866,29 @@ func TestReadDiagnosticDoesNotLogUnknownProviderOrPrivateModel(t *testing.T) {
 		t.Fatalf("private model/provider data escaped: %#v", logger.fields)
 	}
 }
+
+func TestBoundStreamDiagnosticDoesNotChangeOrFallBackToSourceRoute(t *testing.T) {
+	for _, selected := range []schemas.ModelProvider{"gpu1", "unknown-private-provider"} {
+		ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+		original := schemas.RoutingInfo{Provider: "gpu0", Model: "private-source-model"}
+		ctx.SetRoutingInfoSnapshot(original)
+		BindManagedStreamReadDiagnostic(ctx, selected)
+		if ctx.Value(schemas.BifrostContextKeyRoutingInfo).(schemas.RoutingInfo).Provider != original.Provider {
+			t.Fatal("diagnostic binding changed routing identity")
+		}
+		logger := &failureDiagnosticLogger{}
+		ch := make(chan *schemas.BifrostStreamChunk, 1)
+		ProcessAndSendError(ctx, func(_ *schemas.BifrostContext, r *schemas.BifrostResponse, e *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError) {
+			return r, e
+		}, io.ErrUnexpectedEOF, ch, logger, nil)
+		<-ch
+		if selected == "gpu1" {
+			if logger.fields["selected_provider"] != "gpu1" || len(logger.fields) != 3 {
+				t.Fatalf("wrong selected diagnostic: %#v", logger.fields)
+			}
+		} else if len(logger.fields) != 2 {
+			t.Fatalf("unknown selected target fell back to source: %#v", logger.fields)
+		}
+		ctx.Cancel()
+	}
+}

@@ -1,0 +1,49 @@
+{
+  "local_build": {
+    "artifact": {
+      "schema": 1,
+      "revision": "f62712c3085b7ea208b9e8aa6db2a1a5f509898a",
+      "source_archive_sha256": "183270b37f97eaaaff32e20dcba21f4778d1ea996d50874d9e80f7d481c53d23",
+      "main_sha256": "8925f01633f4cb04cf94d0cefc4583b2a1dbe631b5e82ed95b239f17df8726cb",
+      "main_bytes": 126652976,
+      "local_image": "sha256:f27992235312e2e1d2d1a5cacdeafd9793f90df40debeb3bf5273145297872b7",
+      "base_reference": "docker.io/maximhq/bifrost@sha256:74826952fd6f1fc32f7bf8c364c41e27d996d0d03e4157ca8b55ddadaacb0668"
+    },
+    "runtime_package_sha256": "cccfa7e3bfb722e601a435b47d89110aa4579665ec37684a75d4e16c7318d87e",
+    "runtime_package_bytes": 40884818,
+    "eight_official_runtime_fields_preserved": true,
+    "static_amd64": true,
+    "production_actions": 0
+  },
+  "primary_assembly": {
+    "at": "2026-11-04T11:38:11.150314+00:00",
+    "unit": "MainPID=0\nResult=success\nExecMainStatus=0\n",
+    "artifact": {
+      "revision": "f62712c3085b7ea208b9e8aa6db2a1a5f509898a",
+      "image": "sha256:3f89bb8f2acf3eefb342fe68fef6d952298941debfc6f95d3c7d85d2ece59f06",
+      "target": "main",
+      "archive_sha256": "183270b37f97eaaaff32e20dcba21f4778d1ea996d50874d9e80f7d481c53d23",
+      "runtime_base_image": "sha256:54f62d143c37d5508cd4211d54751e9b686f503b2582bf0ac3e772b596b29520",
+      "main_binary_sha256": "8925f01633f4cb04cf94d0cefc4583b2a1dbe631b5e82ed95b239f17df8726cb",
+      "local_build_image": "sha256:f27992235312e2e1d2d1a5cacdeafd9793f90df40debeb3bf5273145297872b7",
+      "runtime_package_sha256": "cccfa7e3bfb722e601a435b47d89110aa4579665ec37684a75d4e16c7318d87e",
+      "compile_or_download": false,
+      "capacity_preflight": {
+        "available_bytes": 78259269632,
+        "service_reserve_bytes": 42160847257,
+        "assembly_headroom_bytes": 3221225472
+      },
+      "production_activated": false
+    },
+    "protected_container_count": 149,
+    "protected_sha256": "93b28ff018749d0395b7a79a47cca2282aac0f1a2c117c2a939f24a9df30f9a8",
+    "all_container_state_fingerprints_preserved": true,
+    "source": {
+      "id": "1bc0fc8e0f146d3351c7f50e1c2d1ab2cde059693612c33ee72ef663c026915b",
+      "image": "sha256:6522c8862265e0400bf57014aada36ea7c78d9c9f0f557ca87d097d38c2f6f12",
+      "restart": 0
+    },
+    "production_activated": false
+  },
+  "limits": "Image assembly only; no production container activation. Original real producer regression and unchanged single-writer runtime must pass before cutover."
+}

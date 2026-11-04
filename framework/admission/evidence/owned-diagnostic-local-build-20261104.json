@@ -1,0 +1,26 @@
+{
+  "actual_producer_red": "Both Chat and Responses emitted only code/event because owned is Background-rooted.",
+  "actual_producer_green_seconds": 0.698,
+  "full_admission_seconds": 0.969,
+  "targeted_core_seconds": 0.135,
+  "wire_visible_change": false,
+  "binding": "After selected target/funding validation, store finite diagnostic provider in a private typed key on owned. RoutingInfo/grant/cancel/body unchanged; unknown target cannot fall back to source label.",
+  "runtime_artifact_tests": 7,
+  "build_bundle_budget_tests": 6,
+  "actual_local_cgroup_qualification": {
+    "passed": true,
+    "cpu_max": "200000 100000",
+    "memory_max": "4294967296",
+    "owned_tag": "sw-owned-build-limits:526c7fbfd0a8404586d631c8239361fe",
+    "production_actions": 0
+  },
+  "local_full_linux_compile": "not started",
+  "primary_assembly": "not started",
+  "primary_space_metadata": {
+    "at": "2026-11-04T09:26:49.560223+00:00",
+    "available_bytes": 52756353024,
+    "compile_required_bytes": 55045749145,
+    "compile_refused_by_policy": true
+  },
+  "production_changes_from_this_candidate": 0
+}

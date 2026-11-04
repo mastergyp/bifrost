@@ -395,6 +395,7 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 			}
 		}
 		owned.SetValue(schemas.BifrostContextKeyStreamIdleTimeout, idle)
+		wire.BindManagedStreamReadDiagnostic(owned, target.Provider)
 		actualRoute = &schemas.ManagedExecutionRoute{Requested: principal.OriginalRoute(), Resolved: schemas.Route{Provider: target.Provider, Model: target.Model}, Foreign: ticket.Lease.Foreign}
 		ctx.SetRoutingInfoSnapshot(actualRoute.RoutingInfo())
 		headers := map[string]string{"X-SW-Admission-Id": operation.ID, "X-SW-Admission-Owner": operation.Owner, "X-SW-Admission-Alias": operation.Alias}

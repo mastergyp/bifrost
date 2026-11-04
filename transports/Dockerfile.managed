@@ -49,7 +49,7 @@ COPY transports/ ./transports/
 # Incremental managed-routing release: relevant local protocol regressions,
 # no provider-wide/GPU/paid API suite. Full historic qualification is retained.
 RUN --network=none cd framework && go test -p 2 ./admission
-RUN --network=none cd core && go test -p 2 ./providers/utils -run 'TestProcessAndSendErrorBoundedDiagnostic|TestIdleReaderEmitsBoundedDiagnostic|TestIdleDiagnostic|TestReadDiagnostic|Test.*(SSE|IdleTimeoutReader|StreamTruncated)'
+RUN --network=none cd core && go test -p 2 ./providers/utils -run 'TestProcessAndSendErrorBoundedDiagnostic|TestIdleReaderEmitsBoundedDiagnostic|TestIdleDiagnostic|TestReadDiagnostic|TestBoundStreamDiagnostic|Test.*(SSE|IdleTimeoutReader|StreamTruncated)'
 FROM build-source AS builder
 COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
 RUN --network=none cd transports && go test -p 2 ./bifrost-http/server -run 'TestManaged(StreamPolicy|Startup)'
