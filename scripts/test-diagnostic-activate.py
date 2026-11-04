@@ -8,7 +8,9 @@ class Fake:
     def __init__(self,busy=False,fail=None):self.calls=[];self.busy=busy;self.fail=fail;self.running={a.p.SOURCE:True,a.CANDIDATE:False}
     def check(self):self.calls.append('check')
     def wait_idle(self):return not self.busy
-    def backup(self):self.calls.append('backup')
+    def backup(self):
+        self.calls.append('backup')
+        if self.fail=='backup':raise RuntimeError('backup unavailable')
     def save(self,n,v):self.calls.append(n)
     def restart(self,i,p):self.calls.append('restart')
     def stop(self,i):
@@ -28,8 +30,10 @@ class Fake:
 class Tests(unittest.TestCase):
     def test_success_one_writer_and_backup_before_stop(self):
         r=Fake();self.assertTrue(a.cutover(r)['deployed']);self.assertLess(r.calls.index('backup'),r.calls.index('stop:'+a.p.SOURCE));self.assertFalse(r.running[a.p.SOURCE]);self.assertTrue(r.running[a.CANDIDATE])
-    def test_busy_is_deferred_without_effects(self):
-        r=Fake(busy=True);self.assertTrue(a.cutover(r)['deferred']);self.assertEqual(r.calls,['check','deferred'])
+    def test_backup_failure_never_stops_source(self):
+        r=Fake(fail='backup')
+        with self.assertRaises(RuntimeError):a.cutover(r)
+        self.assertEqual(r.calls,['check','backup']);self.assertTrue(r.running[a.p.SOURCE])
     def test_unknown_stop_never_starts_candidate(self):
         r=Fake(fail='unknown_stop')
         with self.assertRaises(a.UnknownEffect):a.cutover(r)

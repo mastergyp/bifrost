@@ -23,12 +23,8 @@ class NotReady(RuntimeError):pass
 
 def cutover(r):
     r.check()
-    if not r.wait_idle():
-        value={'deferred':True,'reason':'local_requests_busy','production_changed':False};r.save('deferred',value);return value
     r.backup()
     r.check()
-    if not r.wait_idle():
-        value={'deferred':True,'reason':'local_requests_became_busy','production_changed':False};r.save('deferred',value);return value
     r.save('activation-intent',{'source':p.SOURCE,'candidate':CANDIDATE,'physical_lease_changes':0})
     r.restart(p.SOURCE,'no')
     r.stop(p.SOURCE)
@@ -81,16 +77,6 @@ class Runtime:
         names=subprocess.check_output(['docker','ps','-a','--format','{{.Names}}'],text=True,timeout=5).splitlines()
         assert ROLLBACK_NAME not in names and 'shinewing-bifrost-streamdiag-retained-68a57c4' not in names
         state=json.loads(Path('/var/lib/shinewing-engine-watchdog/state.json').read_text());assert state['active'] is None and state['revision']=='fef5bdb8995742050e0c2aa4c0fed1de99b6c414'
-    def wait_idle(self):
-        deadline=time.monotonic()+30
-        while True:
-            self.check()
-            with self.opener.open(self.base(p.SOURCE)+'/metrics',timeout=4) as response:raw=response.read(4*1024*1024).decode()
-            values=[float(line.rsplit(' ',1)[1]) for line in raw.splitlines() if line.startswith('bifrost_active_requests{')]
-            assert values and all(v>=0 for v in values),'No trustworthy local activity measurement'
-            if sum(values)==0:return True
-            if time.monotonic()>=deadline:return False
-            time.sleep(.5)
     def backup(self):
         data=Path(next(m['Source'] for m in self.source['Mounts'] if m['Destination']=='/app/data'))
         with sqlite3.connect('file:'+str(data/'config.db')+'?mode=ro',uri=True,timeout=2) as src:
