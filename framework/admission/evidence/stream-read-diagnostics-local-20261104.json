@@ -1,0 +1,31 @@
+{
+  "production_bifrost": {
+    "revision": "245dfea083f0fa7cd9ee8928cbfc583d49b9276c",
+    "image": "sha256:8206f4a3022b40891acc8bb98c743ae6315a8d27516e1d0106de7814b9f197f0",
+    "container": "c36579edc5e75cc51e59fba4ed12f0a11f896d47ace369b452b6bf3d2d43b0e3"
+  },
+  "local_base": "5e99d39",
+  "base_runtime_diff_from_production": false,
+  "intervening_diff": "Two documentation changes and managed build runner retaining verified regional mirrors only; no core/framework/runtime semantic difference.",
+  "red": "7 original error branches fail missing bounded diagnostic, not compile error",
+  "green": {
+    "targeted_stream_suite": "passed 16.471 seconds",
+    "complete_utils_package": "passed 35.277 seconds",
+    "new_cases": 8,
+    "real_owned_pipe_idle_expiry": true
+  },
+  "diagnostic_fields": [
+    "event",
+    "code"
+  ],
+  "content_used_for_classification": false,
+  "wire_error_status_type_code_message_identity_and_fallback_preserved": true,
+  "provider_harness_exemption": "Log-only change, no wire-visible change; existing error construction and all caller fields are asserted unchanged. No new live model/API test.",
+  "production_deployed": false,
+  "historical_backfill": false,
+  "source_sha256": {
+    "core/providers/utils/utils.go": "8731f807f1ba6f9db865e54a15f7437ac58cafb866be1c0faa10fc87a7e1f975",
+    "core/providers/utils/utils_test.go": "93e8ad3cc76939e8a467380cf50eb8daca8b074bd569d718bd9953a77f718d2c",
+    "transports/Dockerfile.managed": "3bb4afeed475071e14f78efe2072286b89229c1d8fb1e0bd68b6d085ab336174"
+  }
+}

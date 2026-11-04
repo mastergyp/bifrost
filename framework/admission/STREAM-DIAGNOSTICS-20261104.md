@@ -1,0 +1,27 @@
+# Content-free stream failure diagnostics
+
+2026-11-04. Source/local qualification only; production Bifrost remains245dfea/image8206/CIDc365. Gateway2687/imagef59 and all data/models/Keys are unchanged by this work. Underlying DeepSeek failures are not yet fixed or attributed.
+
+The current Bifrost ProcessAndSendError read-error branch supplies no stable structural cause. Operators cannot distinguish idle timeout, caller cancellation, deadline, unexpected EOF, EOF or another read error without inspecting legacy messages, which this investigation forbids. Add exactly one bounded `bifrost_stream_read_failure` structured warning with `code`, classified through Go error identities and net.Error.Timeout. No message/content matching, request identifiers, model payloads, secrets, new storage, unbounded buffers or retry/replay. Unknown errors remain `stream_read_error`.
+
+The original typed-carrier path, HTTP status, caller SSE/error, message, underlying error identity, fallback flags, accounting and physical work are unchanged. This deliberately does not set Error.Code/Type or status, which could affect client or retry semantics. The new code is operator log metadata only, through the original Logger. Existing Docker rotation bounds apply; no container is rebuilt merely for log rotation.
+
+The production image label and current container were read directly. Local5e99d39 contains the same runtime sources as production245dfea; only docs and the managed builder regional-mirror correction intervene. Original static dependencies/custom managed admission/funding and runtime metadata are retained. The frozen production Compose tree is not used for build or deployment.
+
+Regression qualification: seven cases failed red due to absent structured event; eight typed-error cases plus a real owned io.Pipe idle expiry pass green, with every original wire/error field preserved. Complete providers/utils passed35.277s; focused stream/SSE/idle/truncation suite passed16.471s. No credentials or paid inference. Dockerfile.managed adds only this focused Linux utility qualification alongside its existing admission tests. See [local proof](evidence/stream-read-diagnostics-local-20261104.json).
+
+Provider-harness exemption: log-only, no wire-visible effect. Go regression asserts the original caller error exactly, so no provider-harness collection or paid live suite is added. No UI, provider conversion, retry policy or protocol change.
+
+Next: fixed-SHA Linux build from a clean Git archive, inspect the original retained build unit/image receipt without resending. Before any activation, qualify original Bifrost stop/drain and current-data rollback, verify the current config/profile/data/Keys and recovery actor bindings; do not use a Gateway-only release procedure or imply that process exit proves remote GPU work stopped. Continue reading only the new bounded structured diagnostic events, never error.message/error.error or user response bodies. Admission400/503/408 phase diagnostics remain a separate follow-up; this change only covers the stream-read branch.
+
+
+## Fixed Linux artifact and stopped-container preparation
+
+The original retained build completed success0. Fixed image `sha256:72d3c7d7260ee46c48f905a652a3ba7bd7555d5bbc67f64aad4acbd35d0d495a`, binary SHA `1a56bc01bae51e28285e54ce25be58b3cd48909c0426ea576236596571eade48`; Linux admission and focused stream utility tests passed, original runtime fields and five running actors remained unchanged. See [Linux proof](evidence/stream-read-diagnostics-linux-20261104.json). No production activation is implied.
+
+`diagnostic-prepare.py` prepares only a **stopped** container from the exact original245 source, copying every runtime configuration/environment/mount/host field and existing profile. Its only permitted differences are fixed image/revision, operation labels, and restart=no until later activation. Unknown HostConfig fields and original Binds order are retained; created object drift or an early start is refused. A finite10-second SQLite Online Backup protects current config; its receipt never exposes credential values. It does not stop/start/rename the source or candidate, call a model, change a gate, or authorize activation. Unknown create outcomes must be reconciled through the original intent/name/labels, never resent. Three pure tests cover13 subcases (preservation,8 invalid sources,4 create drifts), including unexpected restart/privilege/mount/env/memory.
+
+A Gateway-only container handoff is intentionally not reused: that helper requires the gateway Unix user and different mounts. The historical joint release also pins an obsolete Gateway and would rebuild coordinated inputs. A separate Bifrost activation/drain/rollback remains to be qualified before this prepared candidate may start. Original current data must be retained on rollback, not overwritten with this backup.
+
+
+The original prepare unit `sw-bifrost-streamdiag-prepare-bbfbe31-r1` completed success0. Candidate `a53cfe51613e265e09ec0a69f6eebc8ed10fecfe270f2aad1f20b8272ad9014c` remains **created/stopped**, never started; original BFc365 is unchanged. Private request/original/config backup files are0600, Online config backup42,872,832 bytes; exact runtime environment/mounts/HostConfig preservation passed the real Docker create check. See [prepared proof](evidence/stream-read-diagnostics-prepared-20261104.json). This operation does not perform or authorize activation. Retain the original prepare intent/root/candidate; do not create it again.
