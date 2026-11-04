@@ -77,7 +77,7 @@ class Runtime:
         assert not Path('/var/lib/shinewing-joint-maintenance/active.json').exists()
         names=subprocess.check_output(['docker','ps','-a','--format','{{.Names}}'],text=True,timeout=5).splitlines()
         assert ROLLBACK_NAME not in names and RETAINED_NAME not in names
-        state=json.loads(Path('/var/lib/shinewing-engine-watchdog/state.json').read_text());assert state['active'] is None and state['revision']=='fef5bdb8995742050e0c2aa4c0fed1de99b6c414'
+        state=json.loads(Path('/var/lib/shinewing-engine-watchdog/state.json').read_text());assert state['active'] is None and state['revision']=='984fb0d46d57cb89103cc3fa829b0942a676dead'
     def backup(self):
         data=Path(next(m['Source'] for m in self.source['Mounts'] if m['Destination']=='/app/data'))
         with sqlite3.connect('file:'+str(data/'config.db')+'?mode=ro',uri=True,timeout=2) as src:
