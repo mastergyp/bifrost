@@ -23,3 +23,14 @@ make run-provider-harness-test PROVIDER=openai FEATURE="selected-idle" BASE_URL=
 ```
 
 Next: fixed Git archive Linux build, inspect its one retained operation and runtime metadata. Then qualify the exact current68 source/candidate and perform Bifrost-only normal drain/current-data rollback, preserving unknown physical work. Attribute new failure phases/pools and observe a new bounded traffic window after actual deployment; never use source tests as production success.
+
+
+## Fixed Linux build and bounded source export
+
+Runtime candidate is fixed9abd33f4120d45a79539ce739791636e067c6819. Original build unit `sw-bifrost-managed-idle-build-9abd33f-r1`, root `/data/releases/shinewing-bifrost-managed/9abd33f4120d45a79539ce739791636e067c6819`, intent `/tmp/sw-bifrost-managed-idle-build-intent.json`; inspect only this operation. Production remains68/a53 until a separate qualified activation.
+
+The first full archive was560,672,783 bytes and timed out during upload. Observed original staging Python absent, exact root empty, no source/archive/build receipt and unit not-found: a known pre-build failure, not an unknown build to replay. The same original root's single stage-resume-r1 receives a compact Git archive from the same fixed runtime revision. Exporter operations4dcbfaf checks all Docker COPY inputs and rejects unknown roots/ADD/syntax; includes all core/framework/plugins/transports/UI/managed qualification code, dependency locks and static build inputs. Only unrelated docs/tests not consumed by Docker are omitted; original Docker ignore already excludes them. Three guard tests pass.
+
+Compact source11,498,861 bytes, SHA84b7d9810c885d30f1157d02b1c23a6b391c4355eeb0e93124e36accf7055f70 (about97.95% smaller). Original full SHA153657c0e38b1f9eb15bbc8bfd57ddde6d7cd3b9e1287c2c594f98838770332d retained in the intent. Exact compact hash/paths and one resumption intent/ack recorded before the original build unit's first launch. No existing runtime, data, key, old release or client is removed. This reduces upload/retained-source waste; Go dependency cache/layer optimization remains separate.
+
+Build is pending until original unitMainPID0/resultsuccess/exit0 and build-r1/image.json exist. New app needs fresh current68/a53 Bifrost-only preparation/activation; do not run the old constants for245/c365 or recreate original68 candidate. New failure-pool/stage attribution and future traffic validation remain open.

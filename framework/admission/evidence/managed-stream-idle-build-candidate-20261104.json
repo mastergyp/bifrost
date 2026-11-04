@@ -1,0 +1,49 @@
+{
+  "runtime_revision": "9abd33f4120d45a79539ce739791636e067c6819",
+  "root": "/data/releases/shinewing-bifrost-managed/9abd33f4120d45a79539ce739791636e067c6819",
+  "unit": "sw-bifrost-managed-idle-build-9abd33f-r1",
+  "archive_sha256": "84b7d9810c885d30f1157d02b1c23a6b391c4355eeb0e93124e36accf7055f70",
+  "archive_bytes": 11498861,
+  "bundle": {
+    "revision": "9abd33f4120d45a79539ce739791636e067c6819",
+    "archive_sha256": "84b7d9810c885d30f1157d02b1c23a6b391c4355eeb0e93124e36accf7055f70",
+    "archive_bytes": 11498861,
+    "export_paths": [
+      "core",
+      "framework",
+      "plugins",
+      "transports",
+      "ui",
+      "tests/managedadmission",
+      "scripts/managed-build.py",
+      ".dockerignore",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md"
+    ],
+    "checked_docker_copy_inputs": [
+      "ui/package*.json",
+      "ui/",
+      "core/",
+      "framework/",
+      "plugins/",
+      "transports/",
+      "tests/managedadmission/"
+    ],
+    "excluded_docs_not_docker_inputs": true,
+    "build_or_deployment_executed": false
+  },
+  "known_failed_original_full_archive": {
+    "sha256": "153657c0e38b1f9eb15bbc8bfd57ddde6d7cd3b9e1287c2c594f98838770332d",
+    "bytes": 560672783,
+    "stage_timeout_seconds": 60,
+    "known_result": "Original staging process gone; exact root empty, no source receipt/build directory/unit. No build or production lifecycle effect."
+  },
+  "staging_resume": {
+    "intent": true,
+    "reason": "Known pre-build failed transfer, not replay of an unknown build",
+    "same_original_root": true,
+    "completed": true
+  },
+  "production_activated": false,
+  "state": "original-linux-build-running-receipt-pending"
+}
