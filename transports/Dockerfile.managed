@@ -31,6 +31,7 @@ RUN cd core && go mod download all
 # Incremental managed-routing release: relevant local protocol regressions,
 # no provider-wide/GPU/paid API suite. Full historic qualification is retained.
 RUN --network=none cd framework && go test -p 2 ./admission
+RUN --network=none cd core && go test -p 2 ./providers/utils -run 'TestProcessAndSendErrorBoundedDiagnostic|TestIdleReaderEmitsBoundedDiagnostic|Test.*(SSE|IdleTimeoutReader|StreamTruncated)'
 FROM build-dependencies AS builder
 COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
 ARG SOURCE_REVISION

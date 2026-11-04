@@ -1,0 +1,15 @@
+# Content-free stream failure diagnostics
+
+2026-11-04. Source/local qualification only; production Bifrost remains245dfea/image8206/CIDc365. Gateway2687/imagef59 and all data/models/Keys are unchanged by this work. Underlying DeepSeek failures are not yet fixed or attributed.
+
+The current Bifrost ProcessAndSendError read-error branch supplies no stable structural cause. Operators cannot distinguish idle timeout, caller cancellation, deadline, unexpected EOF, EOF or another read error without inspecting legacy messages, which this investigation forbids. Add exactly one bounded `bifrost_stream_read_failure` structured warning with `code`, classified through Go error identities and net.Error.Timeout. No message/content matching, request identifiers, model payloads, secrets, new storage, unbounded buffers or retry/replay. Unknown errors remain `stream_read_error`.
+
+The original typed-carrier path, HTTP status, caller SSE/error, message, underlying error identity, fallback flags, accounting and physical work are unchanged. This deliberately does not set Error.Code/Type or status, which could affect client or retry semantics. The new code is operator log metadata only, through the original Logger. Existing Docker rotation bounds apply; no container is rebuilt merely for log rotation.
+
+The production image label and current container were read directly. Local5e99d39 contains the same runtime sources as production245dfea; only docs and the managed builder regional-mirror correction intervene. Original static dependencies/custom managed admission/funding and runtime metadata are retained. The frozen production Compose tree is not used for build or deployment.
+
+Regression qualification: seven cases failed red due to absent structured event; eight typed-error cases plus a real owned io.Pipe idle expiry pass green, with every original wire/error field preserved. Complete providers/utils passed35.277s; focused stream/SSE/idle/truncation suite passed16.471s. No credentials or paid inference. Dockerfile.managed adds only this focused Linux utility qualification alongside its existing admission tests. See [local proof](evidence/stream-read-diagnostics-local-20261104.json).
+
+Provider-harness exemption: log-only, no wire-visible effect. Go regression asserts the original caller error exactly, so no provider-harness collection or paid live suite is added. No UI, provider conversion, retry policy or protocol change.
+
+Next: fixed-SHA Linux build from a clean Git archive, inspect the original retained build unit/image receipt without resending. Before any activation, qualify original Bifrost stop/drain and current-data rollback, verify the current config/profile/data/Keys and recovery actor bindings; do not use a Gateway-only release procedure or imply that process exit proves remote GPU work stopped. Continue reading only the new bounded structured diagnostic events, never error.message/error.error or user response bodies. Admission400/503/408 phase diagnostics remain a separate follow-up; this change only covers the stream-read branch.

@@ -3679,6 +3679,29 @@ type BifrostErrorCarrier interface {
 	BifrostError() *schemas.BifrostError
 }
 
+// streamReadDiagnosticCode classifies Go error identities, never error text or
+// response content. These bounded log labels do not alter the wire error,
+// retry/fallback eligibility, cancellation, or accounting semantics.
+func streamReadDiagnosticCode(err error) string {
+	switch {
+	case errors.Is(err, ErrStreamIdleTimeout):
+		return "stream_idle_timeout"
+	case errors.Is(err, context.Canceled):
+		return "stream_cancelled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "stream_deadline"
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return "stream_unexpected_eof"
+	case errors.Is(err, io.EOF):
+		return "stream_eof"
+	}
+	var timeout net.Error
+	if errors.As(err, &timeout) && timeout.Timeout() {
+		return "stream_read_timeout"
+	}
+	return "stream_read_error"
+}
+
 func ProcessAndSendError(
 	ctx *schemas.BifrostContext,
 	postHookRunner schemas.PostHookRunner,
@@ -3693,6 +3716,11 @@ func ProcessAndSendError(
 			ProcessAndSendBifrostError(ctx, postHookRunner, typed, responseChan, logger, postHookSpanFinalizer)
 			return
 		}
+	}
+	// Operators can count these events without reading the legacy error message,
+	// which may contain provider content. Never add request bodies/keys as fields.
+	if logger != nil {
+		logger.LogHTTPRequest(schemas.LogLevelWarn, "bifrost_stream_read_failure").Str("code", streamReadDiagnosticCode(err)).Send()
 	}
 	// Send scanner error through channel
 	bifrostError := &schemas.BifrostError{
