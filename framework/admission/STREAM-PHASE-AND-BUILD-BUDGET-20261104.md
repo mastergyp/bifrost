@@ -19,3 +19,9 @@
 managed-build在intent/构建前检查/data可用空间，保留max(总容量10%,24GiB)+12GiB构建头寸；缺空间明确拒绝，无自动清理和业务重启。全程同一专用非阻塞build锁防本helper并发抢同一余量。这是构建前保护，不是磁盘硬配额，也不协调其他项目任意写入；当前运行包及旧root脚本没有被替换，后续固定源码构建才采用。
 
 [本机证据](evidence/stream-phase-build-local-20261104.json)。下一步固定Linux包、核对原actor及同当前数据回退后再考虑独立Bifrost发布；不运行旧固定CID联合发布器，不重发任何旧intent。
+
+## 17:02 Linux包完成，未激活
+
+固定7adf4fc/image6522c886/main SHA c1e8cb18，原`sw-bifrost-stream-phase-build-7adf4fc-r1` MainPID0/success0。admission0.916s/utils1.213s/server0.041s实际通过，main和原8官方runtime字段验证完成；五原服务足迹保持。构建前可用60420657152bytes、服务余量42160847257、头寸12884901888；Linux网络下载补齐了本机offline未覆盖资格。原本机SSH等待240秒超时，但服务器原unit持续构建并最终成功；不重发、不重建、没有生产重启。后续分发systemd-run用no-block，未知只观察原unit。[Linux制品](evidence/stream-phase-build-linux-20261104.json)。
+
+下一步manifest固定新APP7/image6522/source9-CID722/image d709/purpose stream-phase；原数据回退仍用同协议当前状态，绝不还原旧快照或启动第二writer。先新ops两owned Docker正向/失败回退资格与stopped prepare，再经原ready/authority/config守卫考虑激活，不使用历史68/c365常量。不做GPU故障或付费模型重复测试。
