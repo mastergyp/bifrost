@@ -1,6 +1,6 @@
 # Content-free stream failure diagnostics
 
-2026-11-04. Source/local qualification only; production Bifrost remains245dfea/image8206/CIDc365. Gateway2687/imagef59 and all data/models/Keys are unchanged by this work. Underlying DeepSeek failures are not yet fixed or attributed.
+2026-11-04 14:10 +08:00. Diagnostics is now deployed: Bifrost68a57c4/image72d3/CIDa53cfe51. Gateway2687/imagef59 and its DB/Redis/store remain unchanged. The original245/c365 stopped normally and is retained as current-data rollback. Underlying DeepSeek failures are not yet fixed or fully attributed. Earlier preparation sections below are historical, not the current running state.
 
 The current Bifrost ProcessAndSendError read-error branch supplies no stable structural cause. Operators cannot distinguish idle timeout, caller cancellation, deadline, unexpected EOF, EOF or another read error without inspecting legacy messages, which this investigation forbids. Add exactly one bounded `bifrost_stream_read_failure` structured warning with `code`, classified through Go error identities and net.Error.Timeout. No message/content matching, request identifiers, model payloads, secrets, new storage, unbounded buffers or retry/replay. Unknown errors remain `stream_read_error`.
 
@@ -25,3 +25,16 @@ A Gateway-only container handoff is intentionally not reused: that helper requir
 
 
 The original prepare unit `sw-bifrost-streamdiag-prepare-bbfbe31-r1` completed success0. Candidate `a53cfe51613e265e09ec0a69f6eebc8ed10fecfe270f2aad1f20b8272ad9014c` remains **created/stopped**, never started; original BFc365 is unchanged. Private request/original/config backup files are0600, Online config backup42,872,832 bytes; exact runtime environment/mounts/HostConfig preservation passed the real Docker create check. See [prepared proof](evidence/stream-read-diagnostics-prepared-20261104.json). This operation does not perform or authorize activation. Retain the original prepare intent/root/candidate; do not create it again.
+
+
+## Bifrost-only activation completed
+
+Fixed operations3313f19, original unit `sw-bifrost-diag-activate-3313f19-r1` success0, operation8cef9838-13d9-4577-a792-1db94cd2bdf0. Five lifecycle tests, three preparation tests and two real network-none owned Docker forward/rollback cases passed. First fixture cleanup reused an exclusive TERM receipt after successful rollback; its original failure remains, cleanup roots were separated and exactly two owned fixtures normally stopped/removed before the final qualification passed.
+
+Production native health200 and exact original/candidate/actor preflight passed. Metrics401 was correctly treated as authentication, never idle; no admin credential extraction or auth relaxation was added. Instead SIGTERM invokes the existing qualified Server.Shutdown drain. That source, storage, admission and funding code is byte-identical old245 to app68; reuse the original isolated held-unary/SSE normal-stop and version/current-data qualification, without claiming a new GPU fault matrix.
+
+OriginalBF normal exit0/OOMfalse after69.530s; TERM-to-new-ready upper bound71.467s, not a zero-downtime claim. Only then was the created candidate started. Original Config/Env/HostConfig/mounts/profile/Key and current SQLite were preserved, restart policy restored; GW/PG/Redis/store footprints unchanged. Native authority and four health checks200, watchdog original timeractive. Online config backup42,872,832 bytes retained privately; rollback uses current data, never overwrites it with the backup. Unknown effects freeze the original operation and never replay or SIGKILL. Physical lease changes0, historical backfill0, inference replay0.
+
+New bounded06:07:40–06:10:40Z diagnostic window contains2 `stream_idle_timeout` events, no user/error body read. This proves that branch occurred; events intentionally contain no model/request identity, so do not claim both are DeepSeek or that GPU queue/prefill/proxy root cause is established. Separate06:07:40–06:10:14Z ledger window152 new rows (151completed/1streamerror),134 sufficiently aged actual completions/134 child attempts match existing Bifrost usage, no duplicates or posting backlog. Windows differ; no all152 accuracy or future guarantee. A crossing-cutover15-minute sample had776 matches/1 unavailable upstream log; preserve as unresolved observation, never block the Gateway or backfill old accounting because of it.
+
+[Production receipt and bounded traffic](evidence/stream-read-diagnostics-production-20261104.json). Admission400/503/408 phase attribution, underlying idle cause and broader8 P0 groups remain open. Do not reissue the original build/prepare/activation.
