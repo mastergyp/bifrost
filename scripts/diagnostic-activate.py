@@ -17,6 +17,7 @@ spec=importlib.util.spec_from_file_location('prepare',Path(__file__).with_name('
 PREPARE=Path('/data/releases/shinewing-bifrost-diagnostics/bbfbe31d8ac1886de50ef0c127233da2be4fa510/prepare-r1')
 CANDIDATE='a53cfe51613e265e09ec0a69f6eebc8ed10fecfe270f2aad1f20b8272ad9014c'
 ROLLBACK_NAME='bifrost-rollback-streamdiag-68a57c4'
+RETAINED_NAME='shinewing-bifrost-streamdiag-retained-68a57c4'
 class UnknownEffect(RuntimeError):pass
 class NotReady(RuntimeError):pass
 
@@ -37,7 +38,7 @@ def cutover(r):
         # timeout/unknown Docker effect propagates without issuing more effects.
         r.save('rollback-intent',{'candidate':CANDIDATE,'source':p.SOURCE,'restore_old_database':False})
         r.stop(CANDIDATE)
-        r.rename(CANDIDATE,'shinewing-bifrost-streamdiag-retained-68a57c4')
+        r.rename(CANDIDATE,RETAINED_NAME)
         r.rename(p.SOURCE,'bifrost')
         r.start(p.SOURCE)
         r.ready(p.SOURCE)
@@ -75,7 +76,7 @@ class Runtime:
         p.check_created(self.request,self.inspect(CANDIDATE),self.source);self.verify_protected()
         assert not Path('/var/lib/shinewing-joint-maintenance/active.json').exists()
         names=subprocess.check_output(['docker','ps','-a','--format','{{.Names}}'],text=True,timeout=5).splitlines()
-        assert ROLLBACK_NAME not in names and 'shinewing-bifrost-streamdiag-retained-68a57c4' not in names
+        assert ROLLBACK_NAME not in names and RETAINED_NAME not in names
         state=json.loads(Path('/var/lib/shinewing-engine-watchdog/state.json').read_text());assert state['active'] is None and state['revision']=='fef5bdb8995742050e0c2aa4c0fed1de99b6c414'
     def backup(self):
         data=Path(next(m['Source'] for m in self.source['Mounts'] if m['Destination']=='/app/data'))
@@ -126,9 +127,18 @@ class Runtime:
 
 
 def main(revision,operation):
+    global PREPARE,CANDIDATE,ROLLBACK_NAME,RETAINED_NAME
     assert os.geteuid()==0 and re.fullmatch('[0-9a-f]{40}',revision)
     assert str(uuid.UUID(operation))==operation
     base=Path('/data/releases/shinewing-bifrost-diagnostics')/revision;assert Path(__file__).resolve()==base/'source/scripts/diagnostic-activate.py'
+    manifest=base/'source/scripts/managed-release.json'
+    if manifest.exists():
+        release=p.configure_release(manifest);PREPARE=base/'prepare-r1'
+        prepared=json.loads((PREPARE/'prepared.json').read_text())
+        assert prepared['prepared'] and prepared['ops_revision']==revision and prepared['app_revision']==p.APP_REVISION and prepared['image']==p.APP_IMAGE and prepared['source']==p.SOURCE
+        CANDIDATE=prepared['candidate'];assert re.fullmatch('[0-9a-f]{64}',CANDIDATE) and CANDIDATE!=p.SOURCE
+        ROLLBACK_NAME='bifrost-rollback-'+release['purpose']+'-'+p.APP_REVISION[:7]
+        RETAINED_NAME='shinewing-bifrost-'+release['purpose']+'-retained-'+p.APP_REVISION[:7]
     root=base/('activation-'+uuid.UUID(operation).hex);assert not root.exists(),'Observe original activation; do not replay'
     root.mkdir(mode=0o700)
     with Path('/var/lib/shinewing-engine-watchdog/watchdog.lock').open('a') as watch,Path('/run/shinewing-joint-maintenance.lock').open('a') as joint:

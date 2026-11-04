@@ -2,6 +2,8 @@ import copy
 import importlib.util
 from pathlib import Path
 import unittest
+import json
+import tempfile
 
 spec=importlib.util.spec_from_file_location('prepare',Path(__file__).with_name('diagnostic-prepare.py'));p=importlib.util.module_from_spec(spec);spec.loader.exec_module(p)
 OP='328958aa-0f19-4d13-8fa8-b78c8956f847'
@@ -29,4 +31,16 @@ class PreparationTests(unittest.TestCase):
             with self.subTest(edit=edit):
                 r=copy.deepcopy(created);edit(r)
                 with self.assertRaises(AssertionError):p.check_created(req,r,s)
+
+class ReleaseManifestTests(unittest.TestCase):
+    def test_committed_manifest_is_fixed_nonsecret_release_input(self):
+        value=p.read_release(Path(__file__).with_name('managed-release.json'))
+        self.assertNotEqual(value['app_image'],value['source_image'])
+    def test_unknown_fields_or_unsafe_identity_are_rejected(self):
+        original=p.read_release(Path(__file__).with_name('managed-release.json'))
+        for change in [{'token':'not-a-real-key'},{'source':'bifrost'},{'app_image':original['source_image']},{'purpose':'../outside'}]:
+            with tempfile.TemporaryDirectory() as directory:
+                path=Path(directory)/'release.json';path.write_text(json.dumps({**original,**change}))
+                with self.subTest(change=change),self.assertRaises(AssertionError):p.read_release(path)
+
 if __name__=='__main__':unittest.main()
