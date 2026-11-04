@@ -13,6 +13,8 @@ The selected/funded internal inference request now carries server-owned `Connect
 - A loopback-only harness companion `TestOwnedManagedUnixLifecycleHarness` runs six cases per API at port19487. Actual synthetic HTTP probes of both APIs return200/passed, zero real-model calls and zero production connections. This bridge is not an employee authentication or GPU test.
 - Two `managed-uds-lifecycle` provider-harness cases are inserted without reformatting the collection; augment/filter finds exactly two. The paid provider harness was not run. Existing custom profile, not upstream default, remains the production source.
 
+A separate local empty-JSON transport comparison sent 2000 POSTs per mode, with no production/model call: pooled socket P50/P95/P99 33/46/59µs; per-call close 69/96/138µs. The latter dialed2000 times rather than1. This is a synthetic local per-hop cost, not production Gateway overhead or GPU throughput.
+
 This trades one local Unix dial per inference call for avoiding cross-call socket lifetime ambiguity. It adds no TCP/TLS handshake to the model and no extra inference. The impact on production throughput must be measured after deployment with the same workload; it is not certified as zero overhead or maximum GPU efficiency. No production component has been changed by this source qualification.
 
 For the owned companion only:

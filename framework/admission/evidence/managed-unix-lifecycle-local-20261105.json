@@ -52,5 +52,33 @@
     "/tmp/sw-uds-harness-structural.log": {
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
-  }
+  },
+  "owned_local_transport_cost": {
+    "accepted_calls": 4000,
+    "gpu_throughput_certified": false,
+    "production_connections": 0,
+    "real_model_calls": 0,
+    "results": [
+      {
+        "client_p50_us": 33,
+        "client_p95_us": 46,
+        "client_p99_us": 59,
+        "connection_close": false,
+        "owned_calls": 2000,
+        "unix_dials": 1,
+        "wall_seconds": 0.070872835
+      },
+      {
+        "client_p50_us": 69,
+        "client_p95_us": 96,
+        "client_p99_us": 138,
+        "connection_close": true,
+        "owned_calls": 2000,
+        "unix_dials": 2000,
+        "wall_seconds": 0.148407999
+      }
+    ],
+    "scope": "owned local Unix HTTP empty JSON transport only; no auth/planner/model/production"
+  },
+  "owned_local_transport_cost_source_sha256": "10edc5ed9454e4ce5b32f567f7a1133644254c0c4d262502e4124ad029796613"
 }
