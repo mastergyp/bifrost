@@ -20,6 +20,23 @@ SOURCE_IMAGE='sha256:8206f4a3022b40891acc8bb98c743ae6315a8d27516e1d0106de7814b9f
 RUNTIME_FIELDS=('User','Entrypoint','Cmd','Env','WorkingDir','Volumes','Healthcheck','ExposedPorts')
 
 
+def read_release(path):
+    value=json.loads(path.read_text())
+    assert set(value)=={'version','app_revision','app_image','source','source_image','purpose'} and value['version']==1
+    assert re.fullmatch('[0-9a-f]{40}',value['app_revision'])
+    assert all(re.fullmatch('sha256:[0-9a-f]{64}',value[k]) for k in ['app_image','source_image'])
+    assert re.fullmatch('[0-9a-f]{64}',value['source']) and value['app_image']!=value['source_image']
+    assert re.fullmatch('[a-z][a-z0-9-]{0,31}',value['purpose'])
+    return value
+
+
+def configure_release(path):
+    global APP_REVISION,APP_IMAGE,SOURCE,SOURCE_IMAGE
+    value=read_release(path)
+    APP_REVISION,APP_IMAGE,SOURCE,SOURCE_IMAGE=(value[k] for k in ['app_revision','app_image','source','source_image'])
+    return value
+
+
 def digest(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True).encode()).hexdigest()
 
@@ -71,6 +88,8 @@ def main(revision):
     assert re.fullmatch('[0-9a-f]{40}',revision)
     base=Path('/data/releases/shinewing-bifrost-diagnostics')/revision
     assert Path(__file__).resolve()==base/'source/scripts/diagnostic-prepare.py'
+    manifest=base/'source/scripts/managed-release.json'
+    release=configure_release(manifest) if manifest.exists() else None
     root=base/'prepare-r1';assert not root.exists(),'Observe original prepare intent; never replay'
     inspect=lambda identity:json.loads(subprocess.check_output(['docker','inspect',identity]))[0]
     source=inspect('bifrost');image=json.loads(subprocess.check_output(['docker','image','inspect',APP_IMAGE]))[0]
@@ -87,7 +106,7 @@ def main(revision):
             src.backup(out,pages=128,progress=progress,sleep=.01)
             assert out.execute('PRAGMA quick_check').fetchone()[0]=='ok'
     (root/'config-online.db').chmod(0o600)
-    name='shinewing-bifrost-streamdiag-'+APP_REVISION[:7]
+    name='shinewing-bifrost-'+(release['purpose'] if release else 'streamdiag')+'-'+APP_REVISION[:7]
     save(root/'create-intent.json',{'operation':operation,'name':name,'request_sha256':digest(request),'source':SOURCE,'image':APP_IMAGE,'start_authorized':False})
     response=subprocess.check_output(['curl','--unix-socket','/var/run/docker.sock','--silent','--show-error','--fail','--max-time','15','-H','Content-Type: application/json','--data-binary','@'+str(root/'request.private.json'),'http://localhost/v1.47/containers/create?name='+name],stderr=subprocess.PIPE)
     identity=json.loads(response)['Id'];created=inspect(identity);check_created(request,created,source)

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "app_revision": "9abd33f4120d45a79539ce739791636e067c6819",
+  "app_image": "sha256:d7091f16110da8a9e9d5eca18eca79f02cd2b45b8da0783d9efae1651a2dcd54",
+  "source": "a53cfe51613e265e09ec0a69f6eebc8ed10fecfe270f2aad1f20b8272ad9014c",
+  "source_image": "sha256:72d3c7d7260ee46c48f905a652a3ba7bd7555d5bbc67f64aad4acbd35d0d495a",
+  "purpose": "stream-idle"
+}

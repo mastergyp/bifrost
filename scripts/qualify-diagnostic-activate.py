@@ -13,6 +13,8 @@ s=importlib.util.spec_from_file_location('activate',Path(__file__).with_name('di
 
 def run(root):
     assert os.geteuid()==0 and not root.exists();root.mkdir(mode=0o700)
+    manifest=root.parent/'source/scripts/managed-release.json'
+    if manifest.exists():a.p.configure_release(manifest)
     result=[];old_image=a.p.SOURCE_IMAGE;new_image=a.p.APP_IMAGE
     for fail in [False,True]:
         case=root/('rollback' if fail else 'success');case.mkdir(mode=0o700);data=case/'data';data.mkdir(mode=0o777);data.chmod(0o777);(data/'state').write_text('before')

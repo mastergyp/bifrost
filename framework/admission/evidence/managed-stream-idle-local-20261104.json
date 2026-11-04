@@ -1,0 +1,38 @@
+{
+  "at": "2026-11-04T06:54:10.134283+00:00",
+  "state": "source-qualified-not-deployed",
+  "production_bifrost_revision": "68a57c41cb9380a321252dd9060eef6529c50dc2",
+  "production_container": "a53cfe51613e265e09ec0a69f6eebc8ed10fecfe270f2aad1f20b8272ad9014c",
+  "production_timeout_metadata_readonly": {
+    "gpu0": {
+      "alias": "sw-qwen3.8-27b",
+      "configured_idle_seconds": 120
+    },
+    "gpu1": {
+      "alias": "sw-deepseek-v4.1-flash",
+      "configured_idle_seconds": 120
+    },
+    "gpu2": {
+      "alias": "sw-glm-5.3-flash",
+      "configured_idle_seconds": 600
+    }
+  },
+  "old_managed_chat_and_responses_idle_argument_seconds": 60,
+  "red_two_short_policy_assertions_failed": true,
+  "red_log_sha256": "c3172109d2d739bd474950392703d876d2fe17304285bbaba7b534a1c0d54e47",
+  "owned_chat_responses_policy_cases": 8,
+  "framework_package_passed_seconds": 0.949,
+  "server_policy_and_startup_tests_passed": true,
+  "targeted_original_funding_and_cancelled_usage_tests_passed_seconds": 0.73,
+  "go_vet_passed": true,
+  "harness_structural_cases": 2,
+  "live_harness_run": false,
+  "paid_model_calls": 0,
+  "production_configuration_changes": 0,
+  "behavior": "Selected trusted funding wrapper carries configured target idle; source/request context is not authority. Original funding handle, target, type and binding delegated unchanged. Missing selected config503, unset/nonpositive official120s default, timeout bounded by existing20minute operation lifetime. Original queue60s and physical/usage/fallback behavior unchanged.",
+  "runtime_source_sha256": {
+    "framework/admission/producer.go": "866e301165d9e9dd6533517e6ade6df138e582a018b2dfc1e71d4f34d334a87d",
+    "transports/bifrost-http/server/managed_admission.go": "cdbf4f6434f94a0e1ab681b79d9a9232ea1810c9472a09a530c2823865269f58"
+  },
+  "limits": "A confirmed configuration defect, not proof that every timeout is DeepSeek or every upstream stall will disappear. Linux build/activation/new-traffic observation still required; no production change from these tests."
+}

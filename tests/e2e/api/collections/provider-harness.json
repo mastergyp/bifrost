@@ -176871,6 +176871,80 @@
           ]
         }
       ]
+    },
+    {
+      "name": "131. Managed selected-idle policy (Shinewing timeout regression)",
+      "description": "OWNED FIXTURE ONLY: run TestOwnedManagedIdleHarness with SW_MANAGED_IDLE_HARNESS=1 on loopback19486; no model credentials/GPU/network provider. Exercises the real managed Producer, Unix controller path and OpenAI SSE decoders with approved10ms selected policy versus60ms synthetic silence. Old hard-coded60s ignores the policy and completes normally, so the required idle error assertion fails. Companion Go tests separately cover long/default policy, conflicting source context, live selected-provider config and original funding preservation. This bridge is not a full production OAuth/funding test and must not be pointed at production or a paid model.",
+      "item": [
+        {
+          "name": "openai gpt-4o-mini selected-idle chat honors approved short policy - Shinewing regression",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"owned\"\n    }\n  ],\n  \"stream\": true,\n  \"max_tokens\": 1\n}"
+            },
+            "url": "{{baseUrl}}/v1/chat/completions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Approved selected idle timeout is honored on the owned fixture', function () {",
+                  "  var body = pm.response.text();",
+                  "  pm.expect(pm.response.code, body).to.eql(200);",
+                  "  pm.expect(pm.response.headers.get('Content-Type'), body).to.include('text/event-stream');",
+                  "  pm.expect(body, body).to.include('stream idle timeout');",
+                  "  pm.expect(pm.response.responseTime, body).to.be.below(2000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "openai gpt-4o-mini selected-idle responses honors approved short policy - Shinewing regression",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"input\": \"owned\",\n  \"stream\": true,\n  \"max_output_tokens\": 1\n}"
+            },
+            "url": "{{baseUrl}}/v1/responses"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Approved selected idle timeout is honored on the owned fixture', function () {",
+                  "  var body = pm.response.text();",
+                  "  pm.expect(pm.response.code, body).to.eql(200);",
+                  "  pm.expect(pm.response.headers.get('Content-Type'), body).to.include('text/event-stream');",
+                  "  pm.expect(body, body).to.include('stream idle timeout');",
+                  "  pm.expect(pm.response.responseTime, body).to.be.below(2000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	wire "github.com/maximhq/bifrost/core/providers/utils"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/admission"
 	"github.com/maximhq/bifrost/plugins/governance"
@@ -37,11 +38,38 @@ func (s *BifrostHTTPServer) configureManagedAdmission(ctx context.Context) error
 		if denied != nil {
 			return nil, denied
 		}
-		return funding, nil
+		return s.withManagedStreamPolicy(funding, r.Provider)
 	}, logger)
 	if err != nil {
 		return err
 	}
 	s.ManagedAdmission = runtime
 	return nil
+}
+
+// Preserve the original governance handle; attach only the selected provider's
+// non-secret network scalar. Neither request headers nor a source model supply it.
+type managedStreamFunding struct {
+	admission.SelectedFunding
+	idle time.Duration
+}
+
+func (f *managedStreamFunding) StreamIdleTimeout() time.Duration { return f.idle }
+
+func (s *BifrostHTTPServer) withManagedStreamPolicy(funding admission.SelectedFunding, provider schemas.ModelProvider) (admission.SelectedFunding, *schemas.BifrostError) {
+	if funding == nil || s.Config == nil {
+		return nil, &schemas.BifrostError{StatusCode: new(503), IsBifrostError: true, AllowFallbacks: new(false), Error: &schemas.ErrorField{Message: "managed selected stream configuration is unavailable"}}
+	}
+	config, err := s.Config.GetProviderConfigRaw(provider)
+	if err != nil || config == nil {
+		return nil, &schemas.BifrostError{StatusCode: new(503), IsBifrostError: true, AllowFallbacks: new(false), Error: &schemas.ErrorField{Message: "managed selected stream configuration is unavailable"}}
+	}
+	idle := wire.DefaultStreamIdleTimeout
+	if config.NetworkConfig != nil && config.NetworkConfig.StreamIdleTimeoutInSeconds > 0 {
+		// The producer's existing20-minute owned operation deadline remains
+		// authoritative even if an operator configures a longer idle period.
+		seconds := min(config.NetworkConfig.StreamIdleTimeoutInSeconds, 20*60)
+		idle = time.Duration(seconds) * time.Second
+	}
+	return &managedStreamFunding{SelectedFunding: funding, idle: idle}, nil
 }

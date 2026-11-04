@@ -1,0 +1,171 @@
+{
+  "at": "2026-11-04T07:24:18.241435+00:00",
+  "revision": "9abd33f4120d45a79539ce739791636e067c6819",
+  "image": "sha256:d7091f16110da8a9e9d5eca18eca79f02cd2b45b8da0783d9efae1651a2dcd54",
+  "container": "722df2b468eb5634008e51c5efe4fdd921d57193653044753ae1127b6f275cb6",
+  "started_at": "2026-11-04T07:22:49.037075694Z",
+  "restart_count": 0,
+  "operations_revision": "e964d513b62c329d440688499c2939ad466ff8f1",
+  "operation": "fdc2bc6b-6a6e-45d8-86fc-3448f007cd52",
+  "unit": "sw-bifrost-managed-idle-activate-e964d51-r1",
+  "unit_result": {
+    "MainPID": "0",
+    "Result": "success",
+    "ExecMainStatus": "0"
+  },
+  "old_container": "a53cfe51613e265e09ec0a69f6eebc8ed10fecfe270f2aad1f20b8272ad9014c",
+  "old_name": "/bifrost-rollback-stream-idle-9abd33f",
+  "old_exit_code": 0,
+  "normal_drain_seconds": 94.13384103775024,
+  "term_to_ready_upper_seconds": 96.06174635887146,
+  "exact_config_environment_host_mounts_preserved": true,
+  "four_dependencies_unchanged": true,
+  "native_authority_unchanged": true,
+  "health": {
+    "data": 200,
+    "admin": 200,
+    "llm": 200,
+    "native": 200
+  },
+  "watchdog_timer_active": "active",
+  "backup_bytes": 43024384,
+  "backup_sha256": "985b3153afc0fe627e44773eebda6fe5c4da138626df5b6776ce97919c9b829a",
+  "physical_lease_changes": 0,
+  "historical_backfill": false,
+  "inference_replay_calls": 0,
+  "diagnostic_window_start": "2026-11-04T07:22:49.037075694Z",
+  "diagnostic_window_end": "2026-11-04T07:24:18.295493+00:00",
+  "diagnostic_counts": {},
+  "all_underlying_stall_causes_proven_fixed": false,
+  "new_traffic": {
+    "snapshot": {
+      "at": "2026-11-04T07:25:31.801054+00:00",
+      "gateway": "7fdcc63e4eedb0f45cc712db419573e289c9210ca93f4f6e98da39f4cd06da92",
+      "accounting_epoch": "d4eceb70-8e0e-4c1f-9cda-798fbd407308",
+      "since": "2026-11-04T07:22:49.037075694Z",
+      "new_ledger_rows": 95,
+      "exact_usage_rows": 95,
+      "estimated_usage_rows": 0,
+      "outcomes": {
+        "not_forwarded": 2,
+        "completed": 93
+      },
+      "anomalies": [],
+      "new_completed_or_review_jobs": 0,
+      "pending_reasons": {},
+      "oldest_new_pending_seconds": 0,
+      "truncated": false,
+      "accounting_ready": true,
+      "identity_ready": true,
+      "managed_upstream_ready": true,
+      "active_logical_operations": 24,
+      "scope": "Stored new Gateway usage and durable posting consistency; external inference token accuracy is independently sampled by normal/SSE smoke"
+    },
+    "bifrost_crosscheck": {
+      "at": "2026-11-04T07:25:32.291296+00:00",
+      "since": "2026-11-04T07:22:49.037075694Z",
+      "gateway": "7fdcc63e4eedb0f45cc712db419573e289c9210ca93f4f6e98da39f4cd06da92",
+      "new_completed_actual_rows_checked": 80,
+      "matched_by_requested_model": {
+        "sw-qwen3.8-27b": 10,
+        "sw-deepseek-v4.1-flash": 59,
+        "sw-glm-5.3-flash": 11
+      },
+      "matched_rows": 80,
+      "upstream_attempt_rows": 80,
+      "mismatches": [],
+      "unavailable": [],
+      "source": "Exact native llm_dispatch_attempts IDs joined to existing Bifrost logs primary IDs; sum child usage, no user content read",
+      "read_only": true,
+      "historical_reconciliation": false,
+      "inference_calls": 0
+    }
+  },
+  "linux_artifact": {
+    "at": "2026-11-04T07:15:22.350135+00:00",
+    "revision": "9abd33f4120d45a79539ce739791636e067c6819",
+    "image": "sha256:d7091f16110da8a9e9d5eca18eca79f02cd2b45b8da0783d9efae1651a2dcd54",
+    "main_binary_sha256": "3db315d0663e2d450841dd5cb4b2d7830736414b99863eab9b0dcf691ac5a6b3",
+    "archive_sha256": "84b7d9810c885d30f1157d02b1c23a6b391c4355eeb0e93124e36accf7055f70",
+    "runtime_base": "sha256:54f62d143c37d5508cd4211d54751e9b686f503b2582bf0ac3e772b596b29520",
+    "runtime_metadata_fields_preserved": [
+      "User",
+      "Entrypoint",
+      "Cmd",
+      "Env",
+      "WorkingDir",
+      "Volumes",
+      "Healthcheck",
+      "ExposedPorts"
+    ],
+    "five_original_actors_unchanged": true,
+    "linux_amd64": true,
+    "unit": "sw-bifrost-managed-idle-build-9abd33f-r1",
+    "unit_result": {
+      "MainPID": "0",
+      "Result": "success",
+      "ExecMainStatus": "0"
+    },
+    "linux_admission_and_stream_utility_tests_passed": true,
+    "production_activated": false,
+    "owned_probe_removed": true,
+    "inference_calls": 0,
+    "keys_changed": 0
+  },
+  "prepared_qualification": {
+    "passed": true,
+    "cases": [
+      {
+        "case": "forward",
+        "passed": true,
+        "actual_docker_term_exit_zero": true,
+        "unique_writer": true,
+        "current_synthetic_state_preserved": true,
+        "owned_containers_removed": true,
+        "network": "none",
+        "inference_calls": 0
+      },
+      {
+        "case": "known-readiness-rollback",
+        "passed": true,
+        "actual_docker_term_exit_zero": true,
+        "unique_writer": true,
+        "current_synthetic_state_preserved": true,
+        "owned_containers_removed": true,
+        "network": "none",
+        "inference_calls": 0
+      }
+    ],
+    "limits": "Real Docker transport with owned shell fixtures and synthetic state; not an additional production Bifrost or GPU fault test. Original Bifrost shutdown/storage source equivalence is independently retained."
+  },
+  "source_bundle": {
+    "revision": "9abd33f4120d45a79539ce739791636e067c6819",
+    "archive_sha256": "84b7d9810c885d30f1157d02b1c23a6b391c4355eeb0e93124e36accf7055f70",
+    "archive_bytes": 11498861,
+    "export_paths": [
+      "core",
+      "framework",
+      "plugins",
+      "transports",
+      "ui",
+      "tests/managedadmission",
+      "scripts/managed-build.py",
+      ".dockerignore",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md"
+    ],
+    "checked_docker_copy_inputs": [
+      "ui/package*.json",
+      "ui/",
+      "core/",
+      "framework/",
+      "plugins/",
+      "transports/",
+      "tests/managedadmission/"
+    ],
+    "excluded_docs_not_docker_inputs": true,
+    "build_or_deployment_executed": false
+  },
+  "owned_loopback_companion_http_cases_passed": 2,
+  "live_provider_harness_run": false
+}

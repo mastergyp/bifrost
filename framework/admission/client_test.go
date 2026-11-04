@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	bifrost "github.com/maximhq/bifrost/core"
+	wire "github.com/maximhq/bifrost/core/providers/utils"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/grant"
 	"github.com/valyala/fasthttp"
@@ -1432,4 +1434,166 @@ func TestNativeOriginalMetadataIsBoundedAndAmbiguousNamesDoNotPickAProvider(t *t
 			t.Fatal("invalid or unbounded original model retained in context")
 		}
 	}
+}
+
+// An owned Unix fixture exercises the real managed producer and SSE decoder.
+// Its trusted selected funding handle supplies the timeout, never HTTP input.
+type selectedIdleFunding struct {
+	typ  schemas.RequestType
+	idle time.Duration
+}
+
+func (f selectedIdleFunding) Target() schemas.Route {
+	return schemas.Route{Provider: "gpu0", Model: "qwen"}
+}
+func (f selectedIdleFunding) RequestType() schemas.RequestType                   { return f.typ }
+func (f selectedIdleFunding) Bind(*schemas.BifrostContext) *schemas.BifrostError { return nil }
+func (f selectedIdleFunding) StreamIdleTimeout() time.Duration                   { return f.idle }
+
+type selectedIdlePolicy struct{ idle time.Duration }
+
+func (p selectedIdlePolicy) Prepare(*schemas.BifrostContext, FrozenInput, *Principal) (Preparation, error) {
+	return Preparation{Pools: []string{"qwen"}, HealthyEngines: []string{"q2"}, Cost: 1, NativeWeight: 1000}, nil
+}
+func (p selectedIdlePolicy) AuthorizeSelected(_ *schemas.BifrostContext, _ *Principal, _ Lease, typ schemas.RequestType) (Selection, *schemas.BifrostError) {
+	return Selection{Target: ModelTarget{Pool: "qwen", Provider: "gpu0", Model: "qwen"}, Funding: selectedIdleFunding{typ: typ, idle: p.idle}}, nil
+}
+func TestManagedProducerUsesSelectedIdleTimeout(t *testing.T) {
+	for _, api := range []API{Chat, Responses} {
+		for _, tc := range []struct {
+			name        string
+			idle        time.Duration
+			wantTimeout bool
+		}{{"short", 10 * time.Millisecond, true}, {"long", 200 * time.Millisecond, false}, {"default", 0, false}, {"negative-default", -time.Second, false}} {
+			t.Run(string(api)+"/"+tc.name, func(t *testing.T) {
+				out, cleanup := ownedSelectedIdleStream(t, api, tc.idle)
+				defer cleanup()
+				timedOut := false
+				for chunk := range out.Stream {
+					if chunk.BifrostError != nil {
+						if chunk.BifrostError.Error != nil && errors.Is(chunk.BifrostError.Error.Error, wire.ErrStreamIdleTimeout) {
+							timedOut = true
+						} else {
+							t.Fatal("unexpected owned stream error")
+						}
+					}
+				}
+				if timedOut != tc.wantTimeout {
+					t.Fatalf("selected idle policy ignored: timeout=%v want=%v", timedOut, tc.wantTimeout)
+				}
+			})
+		}
+	}
+}
+
+func ownedSelectedIdleStream(t *testing.T, api API, idle time.Duration) (*schemas.LLMPluginShortCircuit, func()) {
+	t.Helper()
+	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/health":
+			ready(w)
+		case "/v1/enqueue":
+			var in struct {
+				Request  Request `json:"request"`
+				Deadline int64   `json:"deadline_ms"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			queued(w, in.Request.ID, time.UnixMilli(in.Deadline))
+		case "/v1/poll":
+			var in struct {
+				Request Request `json:"request"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			respond(w, map[string]any{"protocol": 1, "decision": map[string]any{"status": "granted", "lease": Lease{ID: in.Request.ID, Pool: "qwen", Engine: "q2", State: "prepared"}}})
+		case "/v1/cancel":
+			respond(w, map[string]any{"protocol": 1, "never_dispatched": false})
+		case "/inference" + string(api):
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(200)
+			w.(http.Flusher).Flush()
+			time.Sleep(60 * time.Millisecond)
+			if api == Chat {
+				fmt.Fprint(w, "data: {\"id\":\"owned\",\"object\":\"chat.completion.chunk\",\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+			} else {
+				fmt.Fprint(w, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"owned\",\"object\":\"response\",\"model\":\"qwen\",\"status\":\"completed\",\"output\":[]}}\n\n")
+			}
+		default:
+			t.Error("unexpected owned route")
+			w.WriteHeader(500)
+		}
+	})
+	producer, err := NewProducer(client, selectedIdlePolicy{idle}, []schemas.ModelProvider{"gpu0"}, 4, bifrost.NewNoOpLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := nativeGrantContext("owned-vk", "owned-user", nativePermits(false))
+	principal := &Principal{source: RuntimeModel{Alias: "sw-qwen", ModelTarget: ModelTarget{Pool: "qwen", Provider: "gpu0", Model: "qwen"}}, authorization: NativeAuthorization{SubjectHash: strings.Repeat("a", 64), Pools: []string{"qwen"}}, deadline: time.Now().Add(3 * time.Second)}
+	ctx.SetValue(principalKey, principal)
+	ctx.SetValue(schemas.BifrostContextKeyStreamIdleTimeout, time.Nanosecond)
+	req := &schemas.BifrostRequest{RequestType: schemas.ChatCompletionStreamRequest, ChatRequest: &schemas.BifrostChatRequest{Provider: "gpu0", Model: "qwen", Input: []schemas.ChatMessage{{Role: "user", Content: &schemas.ChatMessageContent{ContentStr: new("owned")}}}}}
+	if api == Responses {
+		req = &schemas.BifrostRequest{RequestType: schemas.ResponsesStreamRequest, ResponsesRequest: &schemas.BifrostResponsesRequest{Provider: "gpu0", Model: "qwen"}}
+		if err := json.Unmarshal([]byte(`[{"role":"user","content":[{"type":"input_text","text":"owned"}]}]`), &req.ResponsesRequest.Input); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out := producer.Handle(ctx, req)
+	if out == nil || out.Error != nil || out.Stream == nil {
+		t.Fatal("owned dispatch rejected before timing check")
+	}
+	return out, func() { ctx.Cancel(); producer.Close() }
+}
+
+// A loopback-only, synthetic harness companion. It has no production config,
+// secrets, GPU endpoint or native identity; no regular binary exposes this route.
+func TestOwnedManagedIdleHarness(t *testing.T) {
+	if os.Getenv("SW_MANAGED_IDLE_HARNESS") != "1" {
+		t.Skip("explicit owned loopback harness companion only")
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:19486")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var requests atomic.Int32
+	complete := make(chan struct{})
+	server := &http.Server{ReadHeaderTimeout: time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		api := API(r.URL.Path)
+		if r.Method != "POST" || (api != Chat && api != Responses) {
+			w.WriteHeader(404)
+			return
+		}
+		if requests.Add(1) > 2 {
+			w.WriteHeader(429)
+			return
+		}
+		defer func() {
+			if requests.Load() == 2 {
+				select {
+				case complete <- struct{}{}:
+				default:
+				}
+			}
+		}()
+		out, cleanup := ownedSelectedIdleStream(t, api, 10*time.Millisecond)
+		defer cleanup()
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(200)
+		for chunk := range out.Stream {
+			raw, err := json.Marshal(chunk)
+			if err != nil {
+				t.Error("owned marshal failed")
+				return
+			}
+			fmt.Fprintf(w, "data: %s\n\n", raw)
+			w.(http.Flusher).Flush()
+		}
+	})}
+	go server.Serve(listener)
+	select {
+	case <-complete:
+	case <-time.After(60 * time.Second):
+	}
+	closeCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	server.Shutdown(closeCtx)
 }
