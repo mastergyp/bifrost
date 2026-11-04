@@ -1,0 +1,5 @@
+FROM docker.io/maximhq/bifrost@sha256:74826952fd6f1fc32f7bf8c364c41e27d996d0d03e4157ca8b55ddadaacb0668
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.source="https://github.com/mastergyp/bifrost" \
+      org.opencontainers.image.revision="$SOURCE_REVISION"
+COPY --chmod=0755 main /app/main

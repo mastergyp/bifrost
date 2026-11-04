@@ -3350,6 +3350,22 @@ func closeBodyStream(bodyStream io.Reader, err error) {
 // if no data arrives within the configured timeout. This unblocks any pending
 // Read() call on the wrapped reader.
 type streamReadDiagnosticKey struct{}
+type managedStreamDiagnosticProviderKey struct{}
+
+// BindManagedStreamReadDiagnostic supplies logging metadata only, after the
+// caller has validated its actual selected target. It grants no authority and
+// changes no RoutingInfo, grant, deadline, cancellation or wire representation.
+func BindManagedStreamReadDiagnostic(ctx *schemas.BifrostContext, provider schemas.ModelProvider) {
+	if ctx == nil {
+		return
+	}
+	switch provider {
+	case "gpu0", "gpu1", "gpu2":
+	default:
+		provider = ""
+	}
+	ctx.SetValue(managedStreamDiagnosticProviderKey{}, provider)
+}
 
 // Only finite progress/phase state. No bytes, messages, IDs or model names.
 // The key is package-private, so request metadata cannot supply this state.
@@ -3756,29 +3772,33 @@ func ProcessAndSendError(
 	if logger != nil {
 		event := logger.LogHTTPRequest(schemas.LogLevelWarn, "bifrost_stream_read_failure").Str("code", streamReadDiagnosticCode(err))
 		if ctx != nil {
-			if route, ok := ctx.Value(schemas.BifrostContextKeyRoutingInfo).(schemas.RoutingInfo); ok {
-				// These are the operator-owned managed providers, stamped only
-				// after selected target/funding validation. Never log Model/Key
-				// or arbitrary provider names from another deployment/request.
-				switch route.Provider {
-				case "gpu0", "gpu1", "gpu2":
-					event.Str("selected_provider", string(route.Provider))
-					if state, ok := ctx.Value(streamReadDiagnosticKey{}).(*streamReadDiagnostic); ok && errors.Is(err, ErrStreamIdleTimeout) {
-						phase := "unknown"
-						switch state.phase.Load() {
-						case 1:
-							phase = "read_blocked"
-						case 2:
-							phase = "between_reads"
-						case 3:
-							phase = "not_started"
-						}
-						progress := "none"
-						if state.progress.Load() {
-							progress = "some"
-						}
-						event.Str("idle_phase", phase).Str("read_progress", progress)
+			provider, bound := ctx.Value(managedStreamDiagnosticProviderKey{}).(schemas.ModelProvider)
+			if !bound {
+				if route, ok := ctx.Value(schemas.BifrostContextKeyRoutingInfo).(schemas.RoutingInfo); ok {
+					provider = route.Provider
+				}
+			}
+			// These are the operator-owned managed providers, stamped only
+			// after selected target/funding validation. Never log Model/Key
+			// or arbitrary provider names from another deployment/request.
+			switch provider {
+			case "gpu0", "gpu1", "gpu2":
+				event.Str("selected_provider", string(provider))
+				if state, ok := ctx.Value(streamReadDiagnosticKey{}).(*streamReadDiagnostic); ok && errors.Is(err, ErrStreamIdleTimeout) {
+					phase := "unknown"
+					switch state.phase.Load() {
+					case 1:
+						phase = "read_blocked"
+					case 2:
+						phase = "between_reads"
+					case 3:
+						phase = "not_started"
 					}
+					progress := "none"
+					if state.progress.Load() {
+						progress = "some"
+					}
+					event.Str("idle_phase", phase).Str("read_progress", progress)
 				}
 			}
 		}

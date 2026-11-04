@@ -1,6 +1,6 @@
 # 流读取阶段与构建容量保护
 
-2026-11-04：用户继续授权P0收尾，服务可用优先。当前线上仍9abd/d709/CID722，本文先记录候选，不把源码或本机测试当部署完成。
+2026-11-04：用户继续授权P0收尾，服务可用优先。当前线上7ad/6522/CID1bc；第一轮读取阶段代码已部署，但owned诊断归属漏项仍待后续候选。不能把源码或本机测试当部署完成。
 
 已确认OCR目录约9分钟净增757645312bytes，接近同期主机可用空间下降；这是当前主要增长来源，不应只归因Docker。线上Doc Engine72h清理已实际启用、最近清11任务且旧72h行0；本地OCR源码有用户未提交工作，与线上新增retention字段不同，未重复修改/部署/删除任务。模型DS原生瞬时28running/0waiting、GPU99–100%，代理buffering off/read timeout1800s，不能因此认定长尾原因。
 
@@ -25,3 +25,11 @@ managed-build在intent/构建前检查/data可用空间，保留max(总容量10%
 固定7adf4fc/image6522c886/main SHA c1e8cb18，原`sw-bifrost-stream-phase-build-7adf4fc-r1` MainPID0/success0。admission0.916s/utils1.213s/server0.041s实际通过，main和原8官方runtime字段验证完成；五原服务足迹保持。构建前可用60420657152bytes、服务余量42160847257、头寸12884901888；Linux网络下载补齐了本机offline未覆盖资格。原本机SSH等待240秒超时，但服务器原unit持续构建并最终成功；不重发、不重建、没有生产重启。后续分发systemd-run用no-block，未知只观察原unit。[Linux制品](evidence/stream-phase-build-linux-20261104.json)。
 
 下一步manifest固定新APP7/image6522/source9-CID722/image d709/purpose stream-phase；原数据回退仍用同协议当前状态，绝不还原旧快照或启动第二writer。先新ops两owned Docker正向/失败回退资格与stopped prepare，再经原ready/authority/config守卫考虑激活，不使用历史68/c365常量。不做GPU故障或付费模型重复测试。
+
+## 17:26真实owned链路修正与本机构建候选
+
+真实Producer创建Background-owned而非从请求ctx继承；第一轮上线三条idle没有新归属字段。现Chat/Responses实际Unix/HTTP/OpenAI链两条red缺字段，green用选中/funding校验后的独立typed私有诊断键，不写RoutingInfo、不改grant/cancel/wire，未知目标不回退源标签。admission整包0.969s、定向core0.135s通过。
+
+生产空闲52.756GB低于55.046GB编译门槛；不降低12GiB编译保护、不再在主机生成Go/npm层。新增本机Docker Desktop固定Git/Linux-amd64全资格编译，实际cgroup夹具已证明每step2CPU/4GiB。服务端仅组装静态AMD64 main，固定base/8原runtime字段/同RootFS前缀、包大小与SHA和Git闭包验证；严格三文件tar拒绝多路径/软链/任意RUN/源或hash错误/动态解释器。静态COPY工作量使用10%/24GiB服务余量+3GiB单独组装头寸，**没有绕过完整编译12GiB保护**。本机纯包/预算13测试通过，真正本机Linux完整编译和生产组装尚未执行，不提前声明通过。
+
+用户最新要求优先清理生产盘，候选先提交保存；生产当前仍7ad，数据库/用户文档/回退资料不动。后续按精确旧构建cache计划受控处理，再继续本机编译及真实字段验收。[候选证据](evidence/owned-diagnostic-local-build-20261104.json)。

@@ -10,7 +10,8 @@ import shlex
 import subprocess
 
 BUILD_PATHS = ('core', 'framework', 'plugins', 'transports', 'ui', 'tests/managedadmission',
-               'scripts/managed-build.py', '.dockerignore', 'LICENSE', 'THIRD_PARTY_NOTICES.md')
+               'scripts/managed-build.py', 'scripts/managed-artifact.py', 'scripts/managed-runtime-assemble.py',
+               '.dockerignore', 'LICENSE', 'THIRD_PARTY_NOTICES.md')
 MAX_ARCHIVE_BYTES = 128 * 1024 ** 2
 
 
