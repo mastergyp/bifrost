@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -305,5 +306,35 @@ func TestManagedProfileHTTPReadinessIsLoadedAuthorityOnly(t *testing.T) {
 	runtime.WrapHTTP(func(*fasthttp.RequestCtx) { t.Fatal("closed runtime routed") })(ctx)
 	if ctx.Response.StatusCode() != 503 {
 		t.Fatalf("closed runtime reports %d", ctx.Response.StatusCode())
+	}
+}
+
+// The controller may queue preparation workers, but it may never create a new
+// relative queue budget after the caller already spent part of its original one.
+func TestManagedPreparationCarriesOriginalAbsoluteDeadline(t *testing.T) {
+	for _, api := range []API{Chat, Responses} {
+		t.Run(string(api), func(t *testing.T) {
+			original := time.Now().Add(800 * time.Millisecond)
+			socket := profileSocket(t, func(w http.ResponseWriter, r *http.Request) {
+				if got := r.Header.Get("X-SW-Admission-Deadline-Ms"); got != strconv.FormatInt(original.UnixMilli(), 10) {
+					t.Errorf("original absolute deadline missing or extended: got %q", got)
+				}
+				json.NewEncoder(w).Encode(map[string]any{"protocol": 1, "namespace": profileNamespace, "contract_sha256": strings.Repeat("a", 64), "pools": []string{"qwen"}, "healthy_engines": []string{"qwen-1"}, "cost": 1, "native_weight": 1})
+			}, 1)
+			client, err := New(socket)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.Close()
+			client.authority = &controlAuthority{namespace: profileNamespace, contract: strings.Repeat("a", 64)}
+			policy := &preparationPolicy{client: client, targets: map[string]ModelTarget{"qwen": {Pool: "qwen"}}, funding: profileFunding}
+			ctx := schemas.NewBifrostContext(context.Background(), time.Now().Add(5*time.Second))
+			defer ctx.Cancel()
+			principal := &Principal{source: RuntimeModel{Alias: "sw-qwen"}, authorization: NativeAuthorization{Pools: []string{"qwen"}}, deadline: original}
+			_, err = policy.Prepare(ctx, FrozenInput{api: api, body: []byte(`{"messages":[]}`)}, principal)
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }

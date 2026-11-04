@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/maximhq/bifrost/core/schemas"
@@ -220,6 +221,15 @@ func (p *preparationPolicy) Prepare(ctx *schemas.BifrostContext, input FrozenInp
 		return Preparation{}, ErrRejected
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
+	// Preparation may wait for a bounded tokenizer worker at the controller.
+	// Carry the original caller budget rather than starting a fresh queue timer.
+	deadline := principal.deadline
+	if callerDeadline, ok := ctx.Deadline(); ok && (deadline.IsZero() || callerDeadline.Before(deadline)) {
+		deadline = callerDeadline
+	}
+	if !deadline.IsZero() {
+		httpRequest.Header.Set("X-SW-Admission-Deadline-Ms", strconv.FormatInt(deadline.UnixMilli(), 10))
+	}
 	p.client.setAuthority(httpRequest.Header.Set)
 	response, err := p.client.data.Do(httpRequest)
 	if err != nil {
