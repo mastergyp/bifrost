@@ -386,6 +386,15 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 		if planningEnded() {
 			return nil, producerError(408, "managed caller left before funded dispatch").Error
 		}
+		// Read only the approved selected target's server-owned stream policy.
+		// Source/request context cannot override the selected model after spill.
+		idle := wire.DefaultStreamIdleTimeout
+		if configured, ok := selection.Funding.(interface{ StreamIdleTimeout() time.Duration }); ok {
+			if value := configured.StreamIdleTimeout(); value > 0 {
+				idle = value
+			}
+		}
+		owned.SetValue(schemas.BifrostContextKeyStreamIdleTimeout, idle)
 		actualRoute = &schemas.ManagedExecutionRoute{Requested: principal.OriginalRoute(), Resolved: schemas.Route{Provider: target.Provider, Model: target.Model}, Foreign: ticket.Lease.Foreign}
 		ctx.SetRoutingInfoSnapshot(actualRoute.RoutingInfo())
 		headers := map[string]string{"X-SW-Admission-Id": operation.ID, "X-SW-Admission-Owner": operation.Owner, "X-SW-Admission-Alias": operation.Alias}
@@ -441,11 +450,11 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 	case schemas.ChatCompletionStreamRequest:
 		request := *r.ChatRequest
 		request.RawRequestBody = body
-		stream, failure = openai.HandleOpenAIChatCompletionStreaming(owned, p.wire, url, &request, nil, nil, 60, false, false, provider, pass, nil, nil, nil, nil, nil, signer, p.logger, nil)
+		stream, failure = openai.HandleOpenAIChatCompletionStreaming(owned, p.wire, url, &request, nil, nil, 0, false, false, provider, pass, nil, nil, nil, nil, nil, signer, p.logger, nil)
 	case schemas.ResponsesStreamRequest:
 		request := *r.ResponsesRequest
 		request.RawRequestBody = body
-		stream, failure = openai.HandleOpenAIResponsesStreaming(owned, p.wire, url, &request, nil, nil, 60, false, false, provider, pass, nil, nil, nil, nil, signer, p.logger, nil)
+		stream, failure = openai.HandleOpenAIResponsesStreaming(owned, p.wire, url, &request, nil, nil, 0, false, false, provider, pass, nil, nil, nil, nil, signer, p.logger, nil)
 	}
 	if failure != nil {
 		return &schemas.LLMPluginShortCircuit{Error: failure, ManagedRoute: actualRoute}

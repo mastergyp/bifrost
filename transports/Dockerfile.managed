@@ -34,6 +34,7 @@ RUN --network=none cd framework && go test -p 2 ./admission
 RUN --network=none cd core && go test -p 2 ./providers/utils -run 'TestProcessAndSendErrorBoundedDiagnostic|TestIdleReaderEmitsBoundedDiagnostic|Test.*(SSE|IdleTimeoutReader|StreamTruncated)'
 FROM build-dependencies AS builder
 COPY --from=ui-builder /app/out ./transports/bifrost-http/ui
+RUN --network=none cd transports && go test -p 2 ./bifrost-http/server -run 'TestManaged(StreamPolicy|Startup)'
 ARG SOURCE_REVISION
 RUN test -n "$SOURCE_REVISION" && cd transports && \
     go build -p 2 -ldflags="-w -s -X main.Version=v2.2.4-sw-managed-${SOURCE_REVISION} -extldflags '-static'" \

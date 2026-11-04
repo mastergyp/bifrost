@@ -9,9 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/admission"
+	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/plugins/governance"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 )
@@ -65,7 +68,7 @@ func TestManagedStartupInstallsProfileAfterOriginalGovernance(t *testing.T) {
 			w.WriteHeader(503)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]any{"protocol": 1, "state": "ready", "routing_enforcement": "enabled", "absolute_queue_deadline": true, "preparation_policy_version": 1, "namespace": "d5f6d5c9-a5fb-4bd1-9a0d-7fd4af925480", "contract_sha256": strings.Repeat("a", 64)})
+		json.NewEncoder(w).Encode(map[string]any{"protocol": 1, "state": "ready", "routing_enforcement": "enabled", "absolute_queue_deadline": true, "preparation_policy_version": 1, "durable_rejection_version": 1, "namespace": "d5f6d5c9-a5fb-4bd1-9a0d-7fd4af925480", "contract_sha256": strings.Repeat("a", 64)})
 	})}
 	go httpServer.Serve(listener)
 	t.Cleanup(func() { httpServer.Close() })
@@ -90,5 +93,45 @@ func TestManagedStartupInstallsProfileAfterOriginalGovernance(t *testing.T) {
 	}
 	if server.configureManagedAdmission(context.Background()) == nil {
 		t.Fatal("live runtime was replaced on repeated configuration")
+	}
+}
+
+type ownedStreamPolicyFunding struct{ bound bool }
+
+func (f *ownedStreamPolicyFunding) Target() schemas.Route {
+	return schemas.Route{Provider: "gpu2", Model: "owned-model"}
+}
+func (f *ownedStreamPolicyFunding) RequestType() schemas.RequestType {
+	return schemas.ResponsesStreamRequest
+}
+func (f *ownedStreamPolicyFunding) Bind(*schemas.BifrostContext) *schemas.BifrostError {
+	f.bound = true
+	return nil
+}
+func TestManagedStreamPolicyUsesSelectedProviderAndPreservesFunding(t *testing.T) {
+	for _, tc := range []struct {
+		seconds int
+		want    time.Duration
+	}{{120, 120 * time.Second}, {600, 600 * time.Second}, {0, 120 * time.Second}, {-1, 120 * time.Second}, {999999, 20 * time.Minute}} {
+		source := configstore.ProviderConfig{NetworkConfig: &schemas.NetworkConfig{StreamIdleTimeoutInSeconds: 1}}
+		target := configstore.ProviderConfig{NetworkConfig: &schemas.NetworkConfig{StreamIdleTimeoutInSeconds: tc.seconds}}
+		server := &BifrostHTTPServer{Config: &lib.Config{Providers: map[schemas.ModelProvider]configstore.ProviderConfig{"gpu0": source, "gpu2": target}}}
+		original := &ownedStreamPolicyFunding{}
+		selected, denied := server.withManagedStreamPolicy(original, "gpu2")
+		if denied != nil {
+			t.Fatal("selected configured policy rejected")
+		}
+		wrapped := selected.(*managedStreamFunding)
+		if wrapped.StreamIdleTimeout() != tc.want || wrapped.SelectedFunding != admission.SelectedFunding(original) || selected.Target() != original.Target() || selected.RequestType() != original.RequestType() {
+			t.Fatal("selected policy/funding replaced or source policy used")
+		}
+		selected.Bind(nil)
+		if !original.bound || target.NetworkConfig.StreamIdleTimeoutInSeconds != tc.seconds {
+			t.Fatal("original binding/configuration changed")
+		}
+	}
+	server := &BifrostHTTPServer{Config: &lib.Config{Providers: map[schemas.ModelProvider]configstore.ProviderConfig{}}}
+	if funding, denied := server.withManagedStreamPolicy(&ownedStreamPolicyFunding{}, "missing"); funding != nil || denied == nil || denied.StatusCode == nil || *denied.StatusCode != 503 {
+		t.Fatal("missing selected config silently accepted")
 	}
 }
