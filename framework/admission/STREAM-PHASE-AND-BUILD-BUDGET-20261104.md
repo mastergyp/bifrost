@@ -33,3 +33,9 @@ managed-build在intent/构建前检查/data可用空间，保留max(总容量10%
 生产空闲52.756GB低于55.046GB编译门槛；不降低12GiB编译保护、不再在主机生成Go/npm层。新增本机Docker Desktop固定Git/Linux-amd64全资格编译，实际cgroup夹具已证明每step2CPU/4GiB。服务端仅组装静态AMD64 main，固定base/8原runtime字段/同RootFS前缀、包大小与SHA和Git闭包验证；严格三文件tar拒绝多路径/软链/任意RUN/源或hash错误/动态解释器。静态COPY工作量使用10%/24GiB服务余量+3GiB单独组装头寸，**没有绕过完整编译12GiB保护**。本机纯包/预算13测试通过，真正本机Linux完整编译和生产组装尚未执行，不提前声明通过。
 
 用户最新要求优先清理生产盘，候选先提交保存；生产当前仍7ad，数据库/用户文档/回退资料不动。后续按精确旧构建cache计划受控处理，再继续本机编译及真实字段验收。[候选证据](evidence/owned-diagnostic-local-build-20261104.json)。
+
+## 19:38 Linux制品资格
+
+原本机构建session38602 exit0，f62712c编译完成；main8925f016/126652976bytes、staticAMD64/原8官方runtime字段通过，本机网络隔离admission/utils/server与main构建完成。只传源闭包11.51MB和运行包40.88MB，主机原sw-bifrost-owned-runtime-assemble-f62712c-r1 success0；无RUN/none网络/本地官方base COPY组装得image3f89bb8f。服务余量42.16GB+3GiB组装预算通过，149原容器进程/状态摘要保持，无业务重启。原编译门不绕过，生产激活尚未执行。
+
+manifest明确app f627/image3f89与source7ad/CID1bc/image652；不得使用旧9/68发布输入或重发原stage/assembly。[实际本机与主机证据](evidence/owned-diagnostic-runtime-linux-20261104.json)。诊断绑定无wire effect，harness豁免为内部日志/不可HTTP到达的构建工具；已补实际Producer回归，不发付费live harness。
