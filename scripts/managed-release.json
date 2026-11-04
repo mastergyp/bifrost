@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "app_revision": "9abd33f4120d45a79539ce739791636e067c6819",
-  "app_image": "sha256:d7091f16110da8a9e9d5eca18eca79f02cd2b45b8da0783d9efae1651a2dcd54",
-  "source": "a53cfe51613e265e09ec0a69f6eebc8ed10fecfe270f2aad1f20b8272ad9014c",
-  "source_image": "sha256:72d3c7d7260ee46c48f905a652a3ba7bd7555d5bbc67f64aad4acbd35d0d495a",
-  "purpose": "stream-idle"
+  "app_revision": "7adf4fcee1071ee2f1a1822969bf3d563af79e93",
+  "app_image": "sha256:6522c8862265e0400bf57014aada36ea7c78d9c9f0f557ca87d097d38c2f6f12",
+  "source": "722df2b468eb5634008e51c5efe4fdd921d57193653044753ae1127b6f275cb6",
+  "source_image": "sha256:d7091f16110da8a9e9d5eca18eca79f02cd2b45b8da0783d9efae1651a2dcd54",
+  "purpose": "stream-phase"
 }

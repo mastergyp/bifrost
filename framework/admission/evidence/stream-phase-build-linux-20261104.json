@@ -1,0 +1,16 @@
+{
+  "at": "2026-11-04T09:02:23.106053+00:00",
+  "revision": "7adf4fcee1071ee2f1a1822969bf3d563af79e93",
+  "image": "sha256:6522c8862265e0400bf57014aada36ea7c78d9c9f0f557ca87d097d38c2f6f12",
+  "main_binary_sha256": "c1e8cb187821220fadc11e7f2c6876f160bd459b5c04f83e9c588114c0ab38ce",
+  "protected_five_runtime_footprints_unchanged": true,
+  "linux_passed_module_lines": [
+    "#37 43.58 ok  \tgithub.com/maximhq/bifrost/framework/admission\t0.916s",
+    "#38 3.617 ok  \tgithub.com/maximhq/bifrost/core/providers/utils\t1.213s",
+    "#40 110.2 ok  \tgithub.com/maximhq/bifrost/transports/bifrost-http/server\t0.041s"
+  ],
+  "eight_official_runtime_fields_validated_by_build": true,
+  "application_activation": false,
+  "physical_lease_actions": 0,
+  "archive_sha256": "10aad1492331415669b6cc93ddf1dae75429999417f6b08cdf9a16624283afe4"
+}
