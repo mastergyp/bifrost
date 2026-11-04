@@ -37,6 +37,7 @@ def run(root):
             def verify_protected(self):assert (data/'state').read_text()=='written-by-new'
         runtime=Owned();out=a.cutover(runtime);assert out.get('rolled_back') if fail else out.get('deployed')
         assert (data/'state').read_text()=='written-by-new';assert sum(runtime.inspect(i)['State']['Running'] for i in ids)==1
+        runtime.root=case/'cleanup';runtime.root.mkdir(mode=0o700)
         for identity in ids:
             row=runtime.inspect(identity);assert row['Config']['Labels'].get('sw.diagnostic-fixture')==label
             if row['State']['Running']:runtime.stop(identity)
