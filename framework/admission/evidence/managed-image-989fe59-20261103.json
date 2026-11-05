@@ -1,0 +1,23 @@
+{
+  "built": true,
+  "revision": "989fe5907743c4efff46250b0d1d7344ba3900ca",
+  "image": "sha256:14167dfe04f310efe7e8e0795ce02db8e8f731f3508a39dd9a434491f0f976bf",
+  "source_archive_sha256": "f0391e7aaf98e55c81f8c12e6e5166e23d34cf9f9cc232b867cd5698131139b2",
+  "linux_admission_package_passed": true,
+  "compiled_binary_help_exit": 0,
+  "original_runtime_metadata_preserved": [
+    "User",
+    "Entrypoint",
+    "Cmd",
+    "Env",
+    "WorkingDir",
+    "Volumes",
+    "Healthcheck",
+    "ExposedPorts"
+  ],
+  "runtime_user": "1000:0",
+  "owned_help_container_removed": true,
+  "production_activated": false,
+  "linux_joint_profile_qualified": false,
+  "optional_profile_probe_built": false
+}

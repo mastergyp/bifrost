@@ -176328,6 +176328,703 @@
           }
         }
       ]
+    },
+    {
+      "name": "127. Explicit output ceiling (#6132)",
+      "description": "Regression for the separate sub-16 ceiling inflation described in #6132. Requires a configured vLLM key serving Qwen/Qwen3-0.6B (the native provider test default). Chat legacy cap and native Responses cap, unary and SSE, must remain hard upper bounds; every unexpected HTTP or SSE error fails. No cloud credentials or production keys are embedded.",
+      "item": [
+        {
+          "name": "vLLM Qwen3 explicit output ceiling chat unary - #6132",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.expect(pm.response.code, pm.response.text()).to.eql(200); });",
+                  "var usage = pm.response.json().usage;",
+                  "pm.test('explicit output ceiling is honored', function () { pm.expect(usage, pm.response.text()).to.be.an('object'); pm.expect(usage.completion_tokens, pm.response.text()).to.be.above(0); pm.expect(usage.completion_tokens, pm.response.text()).to.be.at.most(1); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"vllm/Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"Print all integers from 1 to 100 separated by commas. Do not stop early.\"}],\"max_tokens\":1,\"stream\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/chat/completions"
+          },
+          "response": []
+        },
+        {
+          "name": "vLLM Qwen3 explicit output ceiling chat streaming - #6132",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.expect(pm.response.code, pm.response.text()).to.eql(200); });",
+                  "var frames = pm.response.text().split(/\\r?\\n/).filter(function (l) { return l.indexOf('data: ') === 0 && l !== 'data: [DONE]'; }).map(function (l) { return JSON.parse(l.slice(6)); });",
+                  "pm.test('no SSE error event', function () { pm.expect(frames.some(function (f) { return f.error || f.type === 'error'; }), pm.response.text()).to.eql(false); });",
+                  "var finals = frames.filter(function (f) { return f.usage; });",
+                  "var usage = finals.length ? finals[finals.length - 1].usage : null;",
+                  "pm.test('explicit output ceiling is honored', function () { pm.expect(usage, pm.response.text()).to.be.an('object'); pm.expect(usage.completion_tokens, pm.response.text()).to.be.above(0); pm.expect(usage.completion_tokens, pm.response.text()).to.be.at.most(8); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"vllm/Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"Print all integers from 1 to 100 separated by commas. Do not stop early.\"}],\"max_tokens\":8,\"stream\":true,\"stream_options\":{\"include_usage\":true}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/chat/completions"
+          },
+          "response": []
+        },
+        {
+          "name": "vLLM Qwen3 explicit output ceiling responses unary - #6132",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.expect(pm.response.code, pm.response.text()).to.eql(200); });",
+                  "var usage = pm.response.json().usage;",
+                  "pm.test('explicit output ceiling is honored', function () { pm.expect(usage, pm.response.text()).to.be.an('object'); pm.expect(usage.output_tokens, pm.response.text()).to.be.above(0); pm.expect(usage.output_tokens, pm.response.text()).to.be.at.most(8); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"vllm/Qwen/Qwen3-0.6B\",\"input\":\"Print all integers from 1 to 100 separated by commas. Do not stop early.\",\"max_output_tokens\":8,\"stream\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/responses"
+          },
+          "response": []
+        },
+        {
+          "name": "vLLM Qwen3 explicit output ceiling responses streaming - #6132",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.expect(pm.response.code, pm.response.text()).to.eql(200); });",
+                  "var frames = pm.response.text().split(/\\r?\\n/).filter(function (l) { return l.indexOf('data: ') === 0 && l !== 'data: [DONE]'; }).map(function (l) { return JSON.parse(l.slice(6)); });",
+                  "pm.test('no SSE error event', function () { pm.expect(frames.some(function (f) { return f.error || f.type === 'error'; }), pm.response.text()).to.eql(false); });",
+                  "var finals = frames.filter(function (f) { return f.response && f.response.usage; });",
+                  "var usage = finals.length ? finals[finals.length - 1].response.usage : null;",
+                  "pm.test('explicit output ceiling is honored', function () { pm.expect(usage, pm.response.text()).to.be.an('object'); pm.expect(usage.output_tokens, pm.response.text()).to.be.above(0); pm.expect(usage.output_tokens, pm.response.text()).to.be.at.most(15); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"vllm/Qwen/Qwen3-0.6B\",\"input\":\"Print all integers from 1 to 100 separated by commas. Do not stop early.\",\"max_output_tokens\":15,\"stream\":true}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/responses"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "128. VK rate window survives activation reload (PR #1)",
+      "description": "API-created fixture-only vLLM key: one completed request consumes its one-request window, then disable/re-enable reloads the scoped model config. The second ordinary/SSE request must remain 429. A lagging DB reset timestamp must not forgive live usage. Each case deletes only its own key; requires the development harness management API.",
+      "item": [
+        {
+          "name": "vLLM Qwen3 VK rate window survives activation unary - PR #1",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var BASE = pm.variables.get('baseUrl');",
+                  "pm.variables.unset('rateWindowVK'); pm.variables.unset('rateWindowVKID');",
+                  "function call(method,path,body,cb) {",
+                  "  var req={url:BASE+path,method:method,header:{'Content-Type':'application/json'}};",
+                  "  if (body !== null) { req.body={mode:'raw',raw:JSON.stringify(body)}; }",
+                  "  pm.sendRequest(req,function(err,res) {",
+                  "    pm.test('governance fixture reached '+method+' '+path,function() { pm.expect(err).to.eql(null); });",
+                  "    if (err) { return; }",
+                  "    pm.test('governance fixture status '+method+' '+path,function() { pm.expect(res.code,'status='+res.code).to.eql(200); });",
+                  "    if (res.code !== 200) { return; }",
+                  "    cb(res.json());",
+                  "  });",
+                  "}",
+                  "call('POST','/api/governance/virtual-keys',{name:'harness-rate-window-'+pm.variables.replaceIn('{{$guid}}'),is_active:true,allow_all_providers:false,provider_configs:[{provider:'vllm',allowed_models:['Qwen/Qwen3-0.6B'],key_ids:['*'],weight:1}],rate_limit:{request_max_limit:1,request_reset_duration:'1h'}},function(created) {",
+                  "  var vk=created.virtual_key; pm.variables.set('rateWindowVK',vk.value); pm.variables.set('rateWindowVKID',vk.id);",
+                  "  var body=JSON.parse(pm.variables.replaceIn(pm.request.body.raw));",
+                  "  pm.sendRequest({url:BASE+'/openai/v1/chat/completions',method:'POST',header:{'Content-Type':'application/json','x-bf-vk':vk.value},body:{mode:'raw',raw:JSON.stringify(body)}},function(err,res) {",
+                  "    pm.test('first counted inference succeeds',function() { pm.expect(err).to.eql(null); pm.expect(res && res.code,res ? res.text() : 'no response').to.eql(200); });",
+                  "    if (err || res.code !== 200) { return; }",
+                  "    var endpoint='/api/governance/virtual-keys/'+vk.id;",
+                  "    call('PUT',endpoint,{is_active:false},function(disabled) {",
+                  "      pm.test('fixture key disabled',function() { pm.expect(disabled.virtual_key.is_active).to.eql(false); });",
+                  "      call('PUT',endpoint,{is_active:true},function(enabled) {",
+                  "        pm.test('same fixture key reenabled',function() { pm.expect(enabled.virtual_key.is_active).to.eql(true); pm.expect(enabled.virtual_key.value===vk.value).to.eql(true); });",
+                  "      });",
+                  "    });",
+                  "  });",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('counted request remains rate limited after VK reload',function() { pm.expect(pm.response.code,pm.response.text()).to.eql(429); });",
+                  "var id=pm.variables.get('rateWindowVKID');",
+                  "if (id) { pm.sendRequest({url:pm.variables.get('baseUrl')+'/api/governance/virtual-keys/'+id,method:'DELETE'},function(err,res) { pm.test('fixture key removed',function() { pm.expect(err).to.eql(null); pm.expect(res && res.code,'cleanup status').to.eql(200); }); }); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-bf-vk",
+                "value": "{{rateWindowVK}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"vllm/Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply OK.\"}],\"max_tokens\":16,\"stream\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/chat/completions"
+          },
+          "response": []
+        },
+        {
+          "name": "vLLM Qwen3 VK rate window survives activation stream - PR #1",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var BASE = pm.variables.get('baseUrl');",
+                  "pm.variables.unset('rateWindowVK'); pm.variables.unset('rateWindowVKID');",
+                  "function call(method,path,body,cb) {",
+                  "  var req={url:BASE+path,method:method,header:{'Content-Type':'application/json'}};",
+                  "  if (body !== null) { req.body={mode:'raw',raw:JSON.stringify(body)}; }",
+                  "  pm.sendRequest(req,function(err,res) {",
+                  "    pm.test('governance fixture reached '+method+' '+path,function() { pm.expect(err).to.eql(null); });",
+                  "    if (err) { return; }",
+                  "    pm.test('governance fixture status '+method+' '+path,function() { pm.expect(res.code,'status='+res.code).to.eql(200); });",
+                  "    if (res.code !== 200) { return; }",
+                  "    cb(res.json());",
+                  "  });",
+                  "}",
+                  "call('POST','/api/governance/virtual-keys',{name:'harness-rate-window-'+pm.variables.replaceIn('{{$guid}}'),is_active:true,allow_all_providers:false,provider_configs:[{provider:'vllm',allowed_models:['Qwen/Qwen3-0.6B'],key_ids:['*'],weight:1}],rate_limit:{request_max_limit:1,request_reset_duration:'1h'}},function(created) {",
+                  "  var vk=created.virtual_key; pm.variables.set('rateWindowVK',vk.value); pm.variables.set('rateWindowVKID',vk.id);",
+                  "  var body=JSON.parse(pm.variables.replaceIn(pm.request.body.raw));",
+                  "  pm.sendRequest({url:BASE+'/openai/v1/chat/completions',method:'POST',header:{'Content-Type':'application/json','x-bf-vk':vk.value},body:{mode:'raw',raw:JSON.stringify(body)}},function(err,res) {",
+                  "    pm.test('first counted inference succeeds',function() { pm.expect(err).to.eql(null); pm.expect(res && res.code,res ? res.text() : 'no response').to.eql(200); });",
+                  "    if (err || res.code !== 200) { return; }",
+                  "    var endpoint='/api/governance/virtual-keys/'+vk.id;",
+                  "    call('PUT',endpoint,{is_active:false},function(disabled) {",
+                  "      pm.test('fixture key disabled',function() { pm.expect(disabled.virtual_key.is_active).to.eql(false); });",
+                  "      call('PUT',endpoint,{is_active:true},function(enabled) {",
+                  "        pm.test('same fixture key reenabled',function() { pm.expect(enabled.virtual_key.is_active).to.eql(true); pm.expect(enabled.virtual_key.value===vk.value).to.eql(true); });",
+                  "      });",
+                  "    });",
+                  "  });",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('counted request remains rate limited after VK reload',function() { pm.expect(pm.response.code,pm.response.text()).to.eql(429); });",
+                  "var id=pm.variables.get('rateWindowVKID');",
+                  "if (id) { pm.sendRequest({url:pm.variables.get('baseUrl')+'/api/governance/virtual-keys/'+id,method:'DELETE'},function(err,res) { pm.test('fixture key removed',function() { pm.expect(err).to.eql(null); pm.expect(res && res.code,'cleanup status').to.eql(200); }); }); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-bf-vk",
+                "value": "{{rateWindowVK}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"vllm/Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply OK.\"}],\"max_tokens\":16,\"stream\":true}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/chat/completions"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "129. Managed Gateway provenance (fork PR #1)",
+      "description": "Default fail-closed Gateway-only channel. All five requests are rejected before provider inference. Valid signatures, original grants, cancellation accounting and provider-rewrite fencing are additionally covered by owned real HTTP/SDK fixtures; this does not qualify the physical producer or production activation.",
+      "item": [
+        {
+          "name": "openai gpt-4o-mini managed-provenance chat unary missing proof - fork PR #1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"Owned auth-only probe\"}],\"max_tokens\":1,\"stream\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sw/gateway/v1/chat/completions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Managed Gateway rejects missing proof before inference', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.eql(401);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.error.type).to.eql('managed_gateway_error');",
+                  "  pm.expect(body.error.code).to.eql('GATEWAY_DELEGATION_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "openai gpt-4o-mini managed-provenance chat stream missing proof - fork PR #1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"Owned auth-only probe\"}],\"max_tokens\":1,\"stream\":true}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sw/gateway/v1/chat/completions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Managed Gateway rejects missing proof before inference', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.eql(401);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.error.type).to.eql('managed_gateway_error');",
+                  "  pm.expect(body.error.code).to.eql('GATEWAY_DELEGATION_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "openai gpt-4o-mini managed-provenance responses unary missing proof - fork PR #1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-4o-mini\",\"input\":\"Owned auth-only probe\",\"max_output_tokens\":1,\"stream\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sw/gateway/v1/responses"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Managed Gateway rejects missing proof before inference', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.eql(401);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.error.type).to.eql('managed_gateway_error');",
+                  "  pm.expect(body.error.code).to.eql('GATEWAY_DELEGATION_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "openai gpt-4o-mini managed-provenance responses stream missing proof - fork PR #1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-4o-mini\",\"input\":\"Owned auth-only probe\",\"max_output_tokens\":1,\"stream\":true}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/sw/gateway/v1/responses"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Managed Gateway rejects missing proof before inference', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.eql(401);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.error.type).to.eql('managed_gateway_error');",
+                  "  pm.expect(body.error.code).to.eql('GATEWAY_DELEGATION_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "openai gpt-4o-mini managed-provenance native channel rejects delegation - fork PR #1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-SW-Gateway-Delegation-Token",
+                "value": "swgd1.invalid.signature"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"model\":\"openai/gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"Owned auth-only probe\"}],\"max_tokens\":1}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/openai/v1/chat/completions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Delegation cannot enter through native service identity', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.eql(401);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.error.type).to.eql('managed_gateway_error');",
+                  "  pm.expect(body.error.code).to.eql('GATEWAY_CHANNEL_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "130. Managed readiness before quota (fork PR #1)",
+      "description": "Unconfigured standalone transport must not claim the managed physical profile is ready. No provider or billable model call.",
+      "item": [
+        {
+          "name": "openai managed-readiness unconfigured service is unavailable - fork PR #1",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/sw/gateway/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Unconfigured managed profile cannot certify readiness', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.eql(503);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('GATEWAY_NOT_READY');",
+                  "  pm.expect(pm.response.headers.get('Cache-Control')).to.eql('no-store');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "131. Managed selected-idle policy (Shinewing timeout regression)",
+      "description": "OWNED FIXTURE ONLY: run TestOwnedManagedIdleHarness with SW_MANAGED_IDLE_HARNESS=1 on loopback19486; no model credentials/GPU/network provider. Exercises the real managed Producer, Unix controller path and OpenAI SSE decoders with approved10ms selected policy versus60ms synthetic silence. Old hard-coded60s ignores the policy and completes normally, so the required idle error assertion fails. Companion Go tests separately cover long/default policy, conflicting source context, live selected-provider config and original funding preservation. This bridge is not a full production OAuth/funding test and must not be pointed at production or a paid model.",
+      "item": [
+        {
+          "name": "openai gpt-4o-mini selected-idle chat honors approved short policy - Shinewing regression",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"owned\"\n    }\n  ],\n  \"stream\": true,\n  \"max_tokens\": 1\n}"
+            },
+            "url": "{{baseUrl}}/v1/chat/completions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Approved selected idle timeout is honored on the owned fixture', function () {",
+                  "  var body = pm.response.text();",
+                  "  pm.expect(pm.response.code, body).to.eql(200);",
+                  "  pm.expect(pm.response.headers.get('Content-Type'), body).to.include('text/event-stream');",
+                  "  pm.expect(body, body).to.include('stream idle timeout');",
+                  "  pm.expect(pm.response.responseTime, body).to.be.below(2000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "openai gpt-4o-mini selected-idle responses honors approved short policy - Shinewing regression",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"input\": \"owned\",\n  \"stream\": true,\n  \"max_output_tokens\": 1\n}"
+            },
+            "url": "{{baseUrl}}/v1/responses"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Approved selected idle timeout is honored on the owned fixture', function () {",
+                  "  var body = pm.response.text();",
+                  "  pm.expect(pm.response.code, body).to.eql(200);",
+                  "  pm.expect(pm.response.headers.get('Content-Type'), body).to.include('text/event-stream');",
+                  "  pm.expect(body, body).to.include('stream idle timeout');",
+                  "  pm.expect(pm.response.responseTime, body).to.be.below(2000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "132. Managed Unix sender lifecycle (Shinewing idle socket regression)",
+      "description": "OWNED FIXTURE ONLY. Start TestOwnedManagedUnixLifecycleHarness with SW_MANAGED_UNIX_HARNESS=1 at loopback19487. Each API checks real Producer->Unix HTTP with buffered and SSE output, sender idle-close, sender restart, and accepted POST whose reply is lost. All output is finite synthetic qualification metadata; no model/GPU/production identity or config. Old producer reuses expired UDS sockets and must fail, while accepted POST must remain single-dispatch. Do not point this folder at a production or paid-model server.",
+      "item": [
+        {
+          "name": "openai gpt-4o-mini managed-uds-lifecycle chat/completions idle restart and no replay - Shinewing regression",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"owned\"\n    }\n  ],\n  \"max_tokens\": 1\n}"
+            },
+            "url": "{{baseUrl}}/v1/chat/completions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Owned Unix managed sender survives idle/restart without POST replay', function () {",
+                  "  var text = pm.response.text();",
+                  "  pm.expect(pm.response.code, text).to.eql(200);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.passed, text).to.eql(true);",
+                  "  pm.expect(body.synthetic_cases, text).to.eql(6);",
+                  "  pm.expect(body.real_model_calls, text).to.eql(0);",
+                  "  pm.expect(body.production_connections, text).to.eql(0);",
+                  "  pm.expect(body.replay_allowed, text).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "openai gpt-4o-mini managed-uds-lifecycle responses idle restart and no replay - Shinewing regression",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"openai/gpt-4o-mini\",\n  \"input\": \"owned\",\n  \"max_output_tokens\": 1\n}"
+            },
+            "url": "{{baseUrl}}/v1/responses"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Owned Unix managed sender survives idle/restart without POST replay', function () {",
+                  "  var text = pm.response.text();",
+                  "  pm.expect(pm.response.code, text).to.eql(200);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.passed, text).to.eql(true);",
+                  "  pm.expect(body.synthetic_cases, text).to.eql(6);",
+                  "  pm.expect(body.real_model_calls, text).to.eql(0);",
+                  "  pm.expect(body.production_connections, text).to.eql(0);",
+                  "  pm.expect(body.replay_allowed, text).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

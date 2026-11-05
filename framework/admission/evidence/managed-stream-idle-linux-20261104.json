@@ -1,0 +1,31 @@
+{
+  "at": "2026-11-04T07:15:22.350135+00:00",
+  "revision": "9abd33f4120d45a79539ce739791636e067c6819",
+  "image": "sha256:d7091f16110da8a9e9d5eca18eca79f02cd2b45b8da0783d9efae1651a2dcd54",
+  "main_binary_sha256": "3db315d0663e2d450841dd5cb4b2d7830736414b99863eab9b0dcf691ac5a6b3",
+  "archive_sha256": "84b7d9810c885d30f1157d02b1c23a6b391c4355eeb0e93124e36accf7055f70",
+  "runtime_base": "sha256:54f62d143c37d5508cd4211d54751e9b686f503b2582bf0ac3e772b596b29520",
+  "runtime_metadata_fields_preserved": [
+    "User",
+    "Entrypoint",
+    "Cmd",
+    "Env",
+    "WorkingDir",
+    "Volumes",
+    "Healthcheck",
+    "ExposedPorts"
+  ],
+  "five_original_actors_unchanged": true,
+  "linux_amd64": true,
+  "unit": "sw-bifrost-managed-idle-build-9abd33f-r1",
+  "unit_result": {
+    "MainPID": "0",
+    "Result": "success",
+    "ExecMainStatus": "0"
+  },
+  "linux_admission_and_stream_utility_tests_passed": true,
+  "production_activated": false,
+  "owned_probe_removed": true,
+  "inference_calls": 0,
+  "keys_changed": 0
+}

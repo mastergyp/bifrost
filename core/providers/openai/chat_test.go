@@ -2,6 +2,7 @@ package openai
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -10,6 +11,38 @@ import (
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/stretchr/testify/require"
 )
+
+func TestToOpenAIChatRequest_PreservesExplicitOutputCeiling(t *testing.T) {
+	for _, provider := range []schemas.ModelProvider{schemas.OpenAI, schemas.VLLM, schemas.DeepSeek, schemas.Ollama, "private-provider"} {
+		for _, limit := range []*int{nil, schemas.Ptr(1), schemas.Ptr(8), schemas.Ptr(15), schemas.Ptr(16), schemas.Ptr(32)} {
+			name := "unset"
+			if limit != nil {
+				name = fmt.Sprint(*limit)
+			}
+			t.Run(string(provider)+"/"+name, func(t *testing.T) {
+				ctx, cancel := schemas.NewBifrostContextWithCancel(nil)
+				defer cancel()
+				if provider == "private-provider" {
+					ctx.SetValue(schemas.BifrostContextKeyIsCustomProvider, true)
+				}
+				request := &schemas.BifrostChatRequest{
+					Provider: provider, Model: "private-model",
+					Input:  []schemas.ChatMessage{{Role: schemas.ChatMessageRoleUser}},
+					Params: &schemas.ChatParameters{MaxCompletionTokens: limit},
+				}
+				got := ToOpenAIChatRequest(ctx, request)
+				require.NotNil(t, got)
+				actual := got.MaxCompletionTokens
+				if got.MaxTokens != nil {
+					require.Nil(t, actual, "only the provider's supported ceiling field is sent")
+					actual = got.MaxTokens
+				}
+				require.Equal(t, limit, actual, "an explicit upper bound must never be raised")
+				require.Equal(t, limit, request.Params.MaxCompletionTokens, "conversion must not mutate the caller")
+			})
+		}
+	}
+}
 
 func TestToOpenAIChatRequest_ToolNormalization(t *testing.T) {
 	// Create tool parameters with keys in non-alphabetical order:

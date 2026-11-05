@@ -15,6 +15,84 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// A config-store read can lag the request-time window reset. Reloading a scoped
+// model config must carry both live counters and their matching window anchors;
+// otherwise the next check treats the preserved usage as expired and erases it.
+func TestModelConfigReloadPreservesLiveRateWindows(t *testing.T) {
+	for _, scope := range []string{configstoreTables.ModelConfigScopeGlobal, configstoreTables.ModelConfigScopeVirtualKey} {
+		for _, stale := range []string{"zero", "expired"} {
+			t.Run(scope+"/"+stale, func(t *testing.T) {
+				ctx := context.Background()
+				rl := buildRateLimitWithUsage("reload-rate", 100, 7, 100, 3)
+				rl.TokenLastReset = time.Now().Add(-time.Minute)
+				rl.RequestLastReset = time.Now().Add(-2 * time.Minute)
+				tokenDuration, requestDuration := "1h", "2h"
+				rl.TokenResetDuration, rl.RequestResetDuration = &tokenDuration, &requestDuration
+				mc := buildModelConfig("reload-config", configstoreTables.ModelConfigAllModels, nil, nil, rl)
+				mc.Scope = scope
+				if scope == configstoreTables.ModelConfigScopeVirtualKey {
+					scopeID := "reload-vk"
+					mc.ScopeID = &scopeID
+				}
+				store, err := NewLocalGovernanceStore(ctx, NewMockLogger(), nil, &configstore.GovernanceConfig{
+					ModelConfigs: []configstoreTables.TableModelConfig{*mc},
+					RateLimits:   []configstoreTables.TableRateLimit{*rl},
+				}, nil, nil)
+				require.NoError(t, err)
+				live := *store.LoadRateLimit(ctx, rl.ID)
+				persisted := *mc
+				persistedRate := *rl
+				persisted.RateLimit = &persistedRate
+				persistedRate.TokenCurrentUsage, persistedRate.RequestCurrentUsage = 0, 0
+				persistedRate.TokenMaxLimit, persistedRate.RequestMaxLimit = ptrInt64(7), ptrInt64(3)
+				persistedRate.TokenLastReset, persistedRate.RequestLastReset = time.Time{}, time.Time{}
+				if stale == "expired" {
+					persistedRate.TokenLastReset = time.Now().Add(-3 * time.Hour)
+					persistedRate.RequestLastReset = time.Now().Add(-4 * time.Hour)
+				}
+				store.UpdateModelConfigInMemory(ctx, &persisted)
+				updated := store.LoadRateLimit(ctx, rl.ID)
+				assert.Equal(t, live.TokenLastReset, updated.TokenLastReset, "token window is runtime-owned")
+				assert.Equal(t, live.RequestLastReset, updated.RequestLastReset, "request window is runtime-owned")
+				limits := []schemas.Limit{{ID: rl.ID}}
+				decision, err := store.CheckRateLimits(ctx, limits, nil, nil)
+				assert.Error(t, err)
+				assert.Equal(t, DecisionRateLimited, decision, "lowered limits must enforce existing live usage")
+				// A request admitted before the edit can finish after the reload.
+				require.NoError(t, store.BumpRateLimitUsage(ctx, rl.ID, 1, true, true))
+				updated = store.LoadRateLimit(ctx, rl.ID)
+				assert.Equal(t, int64(8), updated.TokenCurrentUsage)
+				assert.Equal(t, int64(4), updated.RequestCurrentUsage)
+			})
+		}
+	}
+}
+
+func TestModelConfigReloadStillExpiresLiveRateWindows(t *testing.T) {
+	ctx := context.Background()
+	rl := buildRateLimitWithUsage("expired-reload-rate", 7, 7, 3, 3)
+	duration := "1h"
+	rl.TokenResetDuration, rl.RequestResetDuration = &duration, &duration
+	rl.TokenLastReset, rl.RequestLastReset = time.Now().Add(-2*time.Hour), time.Now().Add(-3*time.Hour)
+	mc := buildModelConfig("expired-reload-config", configstoreTables.ModelConfigAllModels, nil, nil, rl)
+	store, err := NewLocalGovernanceStore(ctx, NewMockLogger(), nil, &configstore.GovernanceConfig{
+		ModelConfigs: []configstoreTables.TableModelConfig{*mc}, RateLimits: []configstoreTables.TableRateLimit{*rl},
+	}, nil, nil)
+	require.NoError(t, err)
+	persisted := *mc
+	persistedRate := *rl
+	persisted.RateLimit = &persistedRate
+	persistedRate.TokenLastReset, persistedRate.RequestLastReset = time.Now(), time.Now()
+	store.UpdateModelConfigInMemory(ctx, &persisted)
+	decision, err := store.CheckRateLimits(ctx, []schemas.Limit{{ID: rl.ID}}, nil, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, DecisionAllow, decision, "config reload must not extend an expired live window")
+	require.NoError(t, store.BumpRateLimitUsage(ctx, rl.ID, 1, true, true))
+	updated := store.LoadRateLimit(ctx, rl.ID)
+	assert.Equal(t, int64(1), updated.TokenCurrentUsage)
+	assert.Equal(t, int64(1), updated.RequestCurrentUsage)
+}
+
 func TestLocalGovernanceStore_GetGovernanceUsageDataExcludesUnrelatedState(t *testing.T) {
 	logger := NewMockLogger()
 	store, err := NewLocalGovernanceStore(context.Background(), logger, nil, &configstore.GovernanceConfig{

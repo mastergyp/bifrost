@@ -1,0 +1,52 @@
+{
+  "gateway_qualified_source": "a82955cfea4c43aa846dd4eec532cd12723154a5",
+  "bifrost_qualified_source": "4c25832cbca2721be46932dddaea05f2e0babb08",
+  "baseline_gateway_source": "bb4a6ed152ef500266530f8616d361867cb52d8b",
+  "red": {
+    "existing_runtime_with_new_completed_request_assertion_failed": true,
+    "assertion": "completed inference cannot produce a never-dispatched receipt",
+    "log_sha256": "69b7c3d68be28e86856f73fa70c1ab3a576e49aa0e334042e38c478e509c4555",
+    "owned_postgres_container_removed": true
+  },
+  "green": {
+    "fixed_capacity_owned_test_passed": true,
+    "go_race_results": {
+      "github.com/maximhq/bifrost/framework/admission": {
+        "pass": 76,
+        "skip": 3
+      },
+      "github.com/mastergyp/bifrost-tests/managedadmission": {
+        "pass": 55,
+        "skip": 1
+      }
+    },
+    "go_vet_passed": true,
+    "rust_fmt_strict_clippy_passed": true,
+    "ordinary_rust_passed": 121,
+    "ordinary_rust_opt_in_ignored": 6,
+    "cancel_dispatch_races": 16,
+    "capacity_concurrent_requests": 100,
+    "actual_bifrost_http_rust_cases": 8,
+    "separate_actual_gateway_http_original_ledger_rows": 2,
+    "owned_containers_removed": 2
+  },
+  "raw_receipt_sha256": "fd07b71b1d7f482dcc62af23dbca31f1453b6ed50113ae6319424c786dea8105",
+  "protocol": {
+    "base_version": 1,
+    "no_dispatch_evidence_version": 2,
+    "legacy_cleanup_compatible": true,
+    "legacy_confirmation_accepted_for_finance": false,
+    "completed_dispatch_refund_allowed": false
+  },
+  "production_activated": false,
+  "signed_return_receipt_implemented": false,
+  "same_request_across_actual_gateway_bifrost_frontends": false,
+  "remaining": [
+    "signed response outcome bound to exact call and request/status/response bytes",
+    "original Gateway durable financial settlement handoff",
+    "real production registry/health/context/quality policy and loader",
+    "common images/cache compatibility",
+    "engine abort/unknown and crash financial recovery",
+    "native TCP Linux stress and complete fixed Linux release/restore/rollback"
+  ]
+}

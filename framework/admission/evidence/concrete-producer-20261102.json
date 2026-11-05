@@ -1,0 +1,187 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "status": "concrete_owned_profile_qualified_not_production_release",
+  "gateway_source_revision": "012134bdc1d2d6492c1894bfdbe43a869d18a4f7",
+  "bifrost_source_revision": "05b40f4b5c6c28d5c74e6d61a5138ad171568666",
+  "bifrost_runtime_source_revision": "6a29d2e89dc921018e098ac432f930e5a9816bc9",
+  "last_test_only_head": "ba05d038159d4a4f2bd63ba7c916d1bc7dd4f5e2",
+  "implementation": {
+    "canonical_openai_conversion_and_sse_reused": true,
+    "literal_unix_socket_only": true,
+    "original_grant_and_limits_preserved": true,
+    "candidate_pools_cannot_expand_original_scope": true,
+    "gateway_call_id_and_absolute_deadline_used": true,
+    "native_http_controls_deadline_snapshot_before_hooks": true,
+    "source_controls_restored_after_conversion": true,
+    "cancelled_consumer_does_not_cancel_owned_decoder": true,
+    "original_posthooks_run_once_by_core": true,
+    "final_chunk_private_marker_not_serialized": true,
+    "stream_resource_cleanup_finishes_before_core_drain": true,
+    "model_input_debug_redacted": true
+  },
+  "qualification": {
+    "sw-producer-final-go.log": {
+      "events": {
+        "github.com/maximhq/bifrost/framework/admission": {
+          "pass": 56,
+          "skip": 3
+        },
+        "github.com/mastergyp/bifrost-tests/managedadmission": {
+          "pass": 38,
+          "skip": 1
+        }
+      },
+      "log_sha256": "79f983df2445cfc5ee03fa6b83565a58237ccec5713a92bd7fa1134f7c527558"
+    },
+    "sw-producer-targeted-utils.log": {
+      "events": {
+        "github.com/maximhq/bifrost/core/providers/utils": {
+          "pass": 2
+        }
+      },
+      "log_sha256": "e8d041b8dfa06e021293e5ef0a6e63c8e7f63705026b1e16e64338ba06571ed8"
+    },
+    "sw-producer-utils-final.log": {
+      "events": {
+        "github.com/maximhq/bifrost/core/providers/utils": {
+          "pass": 735,
+          "fail": 1
+        }
+      },
+      "log_sha256": "fea3de8db1c70784dd8ad20ba06dc76b75ab6c937bcc56fa09e75775442fd5b0"
+    },
+    "sw-producer-stream-pool-baseline3.log": {
+      "events": {
+        "github.com/maximhq/bifrost/core/providers/utils": {
+          "pass": 2,
+          "fail": 1
+        }
+      },
+      "log_sha256": "6ea6007e2524f63abac8b2f87086a0506898d2a402ef1f29a8a43729d735fb70"
+    }
+  },
+  "vet_passed": true,
+  "vet_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "actual_owned_profile": {
+    "receipt_sha256": "9ad940a044abaebfafd47b785147dbe7f415e4414bfbe99ec8941d407b9b454b",
+    "bifrost_http_original_grant_governance_producer_rust_mock_cases": 8,
+    "routes": [
+      "native_chat",
+      "native_responses",
+      "signed_gateway_chat",
+      "signed_gateway_responses"
+    ],
+    "unary_and_cancelled_streams": true,
+    "original_nonzero_money_tokens_requests_settled_once": true,
+    "native_provider_key_selection_calls": 0,
+    "physical_final_state": "finished",
+    "active_at_end": 0,
+    "owned_schema_removed": true,
+    "capacity_concurrent_requests_separately": 100,
+    "original_gateway_pg_redis_tests_passed": 121,
+    "ordinary_gateway_opt_in_ignored": 6,
+    "all_four_owned_go_probes_explicit": true,
+    "independent_gateway_verifier_original_ledger_rows": 2,
+    "owned_containers_removed": 2,
+    "real_models": 0
+  },
+  "ci": {
+    "id": 41420251432,
+    "source_revision": "012134bdc1d2d6492c1894bfdbe43a869d18a4f7",
+    "conclusion": "success",
+    "url": "https://github.com/mastergyp/shinewing-ai-gateway/actions/runs/41420251432"
+  },
+  "known_unqualified_native_pool_stress": {
+    "test": "TestStreamingPoolSurvivesCancelledStreams",
+    "full_utils_pass_events": 735,
+    "full_utils_fail_events": 1,
+    "old_utils_go_overlay_repetitions": 3,
+    "overlay_pass": 2,
+    "overlay_fail": 1,
+    "observed_errors": [
+      "server closed connection before first response byte",
+      "cannot assign requested address under repeated cancellation load"
+    ],
+    "root_cause_fully_established": false,
+    "production_native_pool_qualified": false,
+    "notes": "Overlay replaces only original utils.go; it is not a complete clean-old-checkout qualification. Retain the failures, do not claim all utility tests green."
+  },
+  "test_portability_fix": {
+    "public_ip_dial_failure_injected": true,
+    "real_test_net_route_assumption_removed": true,
+    "old_utils_overlay_same_public_ip_test_failed": true
+  },
+  "prior_failed_owned_qualifications": [
+    {
+      "receipt_sha256": "9fd2bf5e7d8d688cff2d7950bfd9753ae02476f2bc3bfbef65ad0ce79a743f22",
+      "reason": "Pricing fixture used working-directory-relative path; child launched from Gateway repository. No producer model request reached.",
+      "owned_containers_removed": 2
+    },
+    {
+      "receipt_sha256": "f5727eae93d766d00903ce88de3702d8e427e07eb6a7fecbb2037578276e49e4",
+      "reason": "Mock expected an optional extra parameter that the canonical standalone route did not preserve. Replaced fixture marker with ordinary message/input content, without changing product passthrough semantics.",
+      "owned_containers_removed": 2
+    }
+  ],
+  "production_readonly": {
+    "containers": [
+      {
+        "id": "b10d07801c15c16e5e4c658590b67dd2e2282c7234676d52b29a641f5d0c6c5f",
+        "image": "sha256:ef872a4e1a8940002bf0b00409d018467280f46f99f502ada5193916db22d155",
+        "started": "2026-11-02T05:21:36.079522701Z",
+        "running": true,
+        "restarts": 0,
+        "config_host_sha256": "d0a8dace96166c5dc641396b41347c478fb96fe1dddbc3ec68dc5f4e991d324f"
+      },
+      {
+        "id": "9e5a21da164a3240d5ffd1c4e8d8591d01260df45c46f332596138195204db39",
+        "image": "sha256:54f62d143c37d5508cd4211d54751e9b686f503b2582bf0ac3e772b596b29520",
+        "started": "2026-11-01T05:24:42.033804517Z",
+        "running": true,
+        "restarts": 0,
+        "config_host_sha256": "c8ae10343e1dd6fd3621a140d2ffcad34976475e4310de51e944f49a6feb04a2"
+      }
+    ],
+    "health": {
+      "generic": {
+        "status": 200,
+        "service": "shinewing-ai-gateway",
+        "version": "0.5.0",
+        "revision": "fd17c5ed9c93b0805deefb941915a83831127dd4",
+        "published_version": 18
+      },
+      "admin": {
+        "status": 200,
+        "service": "shinewing-ai-gateway-admin",
+        "version": null,
+        "revision": null,
+        "published_version": 18
+      },
+      "llm": {
+        "status": 200,
+        "service": "shinewing-llm-access-gateway",
+        "version": "0.5.0",
+        "revision": null,
+        "published_version": null
+      }
+    }
+  },
+  "release": {
+    "explicit_enforced_profile_used_only_in_owned_fixture": true,
+    "default_control_start_enforcement": "not_enabled",
+    "standalone_cli_producer_loader_installed": false,
+    "production_mutated": false,
+    "whole_model_release_qualified": false,
+    "native_pre_hook_logical_model_binding_qualified": false,
+    "actual_target_registry_finance_keys_contracts_qualified": false,
+    "common_images_and_cache_qualified": false,
+    "actual_abort_crash_financial_recovery_qualified": false
+  },
+  "limits": [
+    "Signed Gateway channel proof uses synthetic signed input in the real Bifrost HTTP fixture. The separate real Rust Gateway HTTP sender still feeds a Go verifier probe; not one combined request through both frontends.",
+    "The policy callback in this owned fixture is synthetic. A production registry/health/target-finance/key policy and loader remain required.",
+    "Native profiles with model-rewriting or independently executing pre-hooks remain unqualified; do not enable them with this composition.",
+    "Private final accounting markers do not certify GPU termination. Rust retains uncertain/dispatched work until actual terminal evidence."
+  ]
+}

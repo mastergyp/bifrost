@@ -38,6 +38,10 @@ type BifrostConfig struct {
 	KVStore            KVStore         // shared KV store for clustering/session stickiness; nil = disabled
 	SessionAffinity    SessionAffinity // Decides which key a session stays on; nil = Bifrost's own default, which needs KVStore to bind anything
 	ModelCatalog       ModelInfoProvider
+	// ManagedInference is an optional deployment-owned path for registered local
+	// providers. It runs after all LLM pre-hooks, before a provider worker is held.
+	// HTTP transport activation/authorization is separate; nil preserves routing.
+	ManagedInference ManagedInference
 }
 
 // ModelProvider represents the different AI model providers supported by Bifrost.
@@ -1941,6 +1945,9 @@ type BifrostRoutingCall struct {
 // BifrostStreamChunk represents a stream of responses from the Bifrost system.
 // Either BifrostResponse or BifrostError will be non-nil.
 type BifrostStreamChunk struct {
+	// FinalForAccounting is internal producer evidence, never a wire field. Core
+	// stamps its final-context flag synchronously before running the post-hooks.
+	FinalForAccounting bool `json:"-"`
 	*BifrostTextCompletionResponse
 	*BifrostChatResponse
 	*BifrostResponsesStreamResponse

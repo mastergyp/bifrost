@@ -1,0 +1,98 @@
+{
+  "observed_at": "2026-11-04T06:10:40.148068+00:00",
+  "application_revision": "68a57c41cb9380a321252dd9060eef6529c50dc2",
+  "image": "sha256:72d3c7d7260ee46c48f905a652a3ba7bd7555d5bbc67f64aad4acbd35d0d495a",
+  "container": "a53cfe51613e265e09ec0a69f6eebc8ed10fecfe270f2aad1f20b8272ad9014c",
+  "started_at": "2026-11-04T06:07:40.223865169Z",
+  "restart_count": 0,
+  "operations_revision": "3313f199a31c0caefd96e4b1f1e65aa054dbbed0",
+  "operation": "8cef9838-13d9-4577-a792-1db94cd2bdf0",
+  "unit": "sw-bifrost-diag-activate-3313f19-r1",
+  "unit_result": {
+    "MainPID": "0",
+    "Result": "success",
+    "ExecMainStatus": "0"
+  },
+  "old_container": "c36579edc5e75cc51e59fba4ed12f0a11f896d47ace369b452b6bf3d2d43b0e3",
+  "old_name": "/bifrost-rollback-streamdiag-68a57c4",
+  "old_exit_code": 0,
+  "old_oom_killed": false,
+  "normal_drain_seconds": 69.5300498008728,
+  "term_to_ready_upper_seconds": 71.46683669090271,
+  "current_data_preserved": true,
+  "original_config_environment_host_mounts_preserved": true,
+  "four_dependencies_unchanged": true,
+  "native_authority_unchanged": true,
+  "health_statuses": {
+    "data": 200,
+    "admin": 200,
+    "llm": 200,
+    "native": 200
+  },
+  "physical_lease_changes": 0,
+  "historical_backfill": false,
+  "inference_replay_calls": 0,
+  "diagnostic_window_start": "2026-11-04T06:07:40.223865169Z",
+  "diagnostic_window_end": "2026-11-04T06:10:40.148090+00:00",
+  "diagnostic_code_counts": {
+    "stream_idle_timeout": 2
+  },
+  "static_event_literal_occurrences": 2,
+  "diagnostic_log_tail_max": 5000,
+  "underlying_deepseek_cause_resolved": false,
+  "backup_bytes": 42872832,
+  "backup_sha256": "7aa24cd3a8ddb6bea7d9633a102dc4acaef0f48026da2c5d82b61f8bcce20f84",
+  "watchdog_timer_active": "active",
+  "new_traffic": {
+    "snapshot": {
+      "at": "2026-11-04T06:10:13.814130+00:00",
+      "gateway": "7fdcc63e4eedb0f45cc712db419573e289c9210ca93f4f6e98da39f4cd06da92",
+      "accounting_epoch": "d4eceb70-8e0e-4c1f-9cda-798fbd407308",
+      "since": "2026-11-04T06:07:40.223865169Z",
+      "new_ledger_rows": 152,
+      "exact_usage_rows": 151,
+      "estimated_usage_rows": 1,
+      "outcomes": {
+        "completed": 151,
+        "upstream_stream_error": 1
+      },
+      "anomalies": [],
+      "new_completed_or_review_jobs": 0,
+      "pending_reasons": {},
+      "oldest_new_pending_seconds": 0,
+      "truncated": false,
+      "accounting_ready": true,
+      "identity_ready": true,
+      "managed_upstream_ready": true,
+      "active_logical_operations": 14,
+      "scope": "Stored new Gateway usage and durable posting consistency; external inference token accuracy is independently sampled by normal/SSE smoke"
+    },
+    "bifrost_crosscheck": {
+      "at": "2026-11-04T06:10:14.237180+00:00",
+      "since": "2026-11-04T06:07:40.223865169Z",
+      "gateway": "7fdcc63e4eedb0f45cc712db419573e289c9210ca93f4f6e98da39f4cd06da92",
+      "new_completed_actual_rows_checked": 134,
+      "matched_by_requested_model": {
+        "sw-deepseek-v4.1-flash": 102,
+        "sw-qwen3.8-27b": 32
+      },
+      "matched_rows": 134,
+      "upstream_attempt_rows": 134,
+      "mismatches": [],
+      "unavailable": [],
+      "source": "Exact native llm_dispatch_attempts IDs joined to existing Bifrost logs primary IDs; sum child usage, no user content read",
+      "read_only": true,
+      "historical_reconciliation": false,
+      "inference_calls": 0
+    }
+  },
+  "qualification": {
+    "MainPID": "0",
+    "Result": "success",
+    "ExecMainStatus": "0"
+  },
+  "lifecycle_unit_tests": 5,
+  "prepare_tests": 3,
+  "owned_docker_cases": 2,
+  "initial_qualification_issue": "First isolated rollback cleanup reused its TERM receipt; retained original failure, corrected cleanup root, normal-stop removed exactly two owned fixtures; no production action."
+}

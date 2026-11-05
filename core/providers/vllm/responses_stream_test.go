@@ -2,6 +2,7 @@ package vllm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,60 @@ import (
 
 	schemas "github.com/maximhq/bifrost/core/schemas"
 )
+
+func TestResponses_PreservesExplicitOutputCeilingOnWire(t *testing.T) {
+	for _, limit := range []int{1, 8, 15, 16} {
+		for _, streaming := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%d/stream=%t", limit, streaming), func(t *testing.T) {
+				captured := make(chan int, 1)
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					var body struct {
+						MaxOutputTokens int `json:"max_output_tokens"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						http.Error(w, "bad JSON", 400)
+						return
+					}
+					captured <- body.MaxOutputTokens
+					response := `{"id":"resp-test","object":"response","created_at":1,"status":"completed","model":"fake-model","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`
+					if streaming {
+						w.Header().Set("Content-Type", "text/event-stream")
+						fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"sequence_number\":0,\"response\":"+response+"}\n\n")
+					} else {
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprint(w, response)
+					}
+				}))
+				defer server.Close()
+				provider := newTestVLLMResponsesStreamProvider(t, false, false)
+				ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+				request := testVLLMResponsesStreamRequest()
+				request.Params = &schemas.ResponsesParameters{MaxOutputTokens: &limit}
+				if streaming {
+					stream, err := provider.ResponsesStream(ctx, noopPostHookRunner, nil, testVLLMKey(server.URL), request)
+					if err != nil {
+						t.Fatal(err)
+					}
+					for _, chunk := range drainStreamWithTimeout(t, stream, 5*time.Second) {
+						if chunk != nil && chunk.BifrostError != nil {
+							t.Fatal(chunk.BifrostError)
+						}
+					}
+				} else if _, err := provider.Responses(ctx, testVLLMKey(server.URL), request); err != nil {
+					t.Fatal(err)
+				}
+				select {
+				case got := <-captured:
+					if got != limit {
+						t.Fatalf("caller limit %d became %d on the upstream wire", limit, got)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("upstream received no request")
+				}
+			})
+		}
+	}
+}
 
 // noopTestLogger is a minimal schemas.Logger implementation for tests that
 // don't want to pull in the core package (which itself imports this

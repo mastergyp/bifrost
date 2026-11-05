@@ -103,6 +103,51 @@ func TestBumpRateLimitUsage_NoLostIncrements(t *testing.T) {
 	assert.Equal(t, int64(goroutines*perGoroutine), final.RequestCurrentUsage, "RequestCurrentUsage dropped increments")
 }
 
+// Reloading a VK also reloads its scoped model configs while admitted requests
+// finish. Config publication must use the existing atomic merge primitives,
+// otherwise it can overwrite an increment even when all window anchors match.
+func TestModelConfigReloadConcurrentAccountingNoLostUsage(t *testing.T) {
+	ctx := context.Background()
+	store := newStandaloneStore(t)
+	budget := buildBudget("reload-concurrent-budget", 1_000_000, "1h")
+	rl := buildRateLimit("reload-concurrent-rate", 1_000_000, 1_000_000)
+	store.UpsertBudgetConfig(ctx, budget.ID, budget)
+	store.UpsertRateLimitConfig(ctx, rl.ID, rl)
+	const chargers, increments, reloaders, reloads = 8, 500, 4, 500
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < chargers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for j := 0; j < increments; j++ {
+				assert.NoError(t, store.BumpBudgetUsageBy(ctx, budget.ID, 1))
+				assert.NoError(t, store.BumpRateLimitUsageBy(ctx, rl.ID, 3, 1))
+			}
+		}()
+	}
+	for i := 0; i < reloaders; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for j := 0; j < reloads; j++ {
+				// Each DB read owns its row/slice, as the actual reload path does.
+				incomingBudget, incomingRate := *budget, *rl
+				mc := buildVKScopedModelConfig("concurrent-config", configstoreTables.ModelConfigAllModels,
+					nil, "concurrent-vk", &incomingBudget, &incomingRate)
+				store.UpdateModelConfigInMemory(ctx, mc)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	assert.Equal(t, float64(chargers*increments), store.LoadBudget(ctx, budget.ID).CurrentUsage)
+	assert.Equal(t, int64(chargers*increments*3), store.LoadRateLimit(ctx, rl.ID).TokenCurrentUsage)
+	assert.Equal(t, int64(chargers*increments), store.LoadRateLimit(ctx, rl.ID).RequestCurrentUsage)
+}
+
 // TestResetBudgetAt_ConcurrentResettersCollapse confirms that many goroutines
 // all trying to reset the same budget to the same newLastReset deduplicate
 // cleanly via CAS — exactly one resetter observes the transition, everyone

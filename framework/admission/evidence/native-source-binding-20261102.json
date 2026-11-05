@@ -1,0 +1,122 @@
+{
+  "passed": true,
+  "scope": "isolated embedded managed runtime; not a production release",
+  "gateway_qualified_revision": "619db4cda0b54efcda1dde32ad7d45b9cf4f4fdf",
+  "bifrost_qualified_revision": "7976a9a8d66bd6dfd708ac42ce989bde2b6e6d7f",
+  "original_native_model_bound_before_http_transport_hooks": true,
+  "original_native_model_and_controls_bound_before_core_pre_request_hooks": true,
+  "original_logical_and_canonical_target_permissions_both_required": true,
+  "unowned_provider_rewrite_cannot_escape_managed_source": true,
+  "explicit_native_alias_registry_preserves_same_backend_routing": true,
+  "source_and_post_hook_target_exposed_separately_to_target_policy": true,
+  "new_quality_contract_policy_implemented": false,
+  "negative_regressions": {
+    "http_red_leaf_cases": 3,
+    "sdk_before_core_overlay_red_leaf_cases": 4,
+    "sdk_overlay_is_complete_old_checkout": false,
+    "ambiguous_unqualified_model_rejected": true,
+    "oversized_original_model_not_retained_in_context": true
+  },
+  "local_fixed_source_race": {
+    "admission_pass_events": 67,
+    "admission_ordinary_owned_skips": 3,
+    "http_sdk_pass_events": 47,
+    "http_sdk_ordinary_owned_skip": 1,
+    "core_managed_pass_events": 9,
+    "new_alias_http_sdk_shapes": 8,
+    "alias_streams_complete_instead_of_cancelled": true,
+    "original_nonzero_money_tokens_requests_charge_once": true,
+    "vet_passed": true
+  },
+  "owned_same_bifrost_request": {
+    "canonical_http_cases": 8,
+    "unary_and_cancelled_sse": true,
+    "original_governance_preserved": true,
+    "real_rust_controller_sender": true,
+    "synthetic_engine": true,
+    "active_at_end": 0,
+    "all_four_go_owned_probes_explicitly_run": true,
+    "original_pg_redis_tests_passed": 121,
+    "ordinary_opt_in_ignored": 6,
+    "concurrent_capacity_requests": 100,
+    "owned_containers_removed": 2
+  },
+  "independent_gateway_http_verifier": {
+    "calls": 2,
+    "original_ledger_rows": 2,
+    "same_request_as_bifrost_frontend": false
+  },
+  "owned_receipt_sha256": "f697cf6036516587a00fa01240459b73b35952c1d15f4dc21e5fbfcfc891f272",
+  "production_observation": {
+    "mutated": false,
+    "gateway": {
+      "id": "b10d07801c15c16e5e4c658590b67dd2e2282c7234676d52b29a641f5d0c6c5f",
+      "image": "sha256:ef872a4e1a8940002bf0b00409d018467280f46f99f502ada5193916db22d155",
+      "started": "2026-11-02T05:21:36.079522701Z",
+      "running": true,
+      "restarts": 0,
+      "config_host_sha256": "d0a8dace96166c5dc641396b41347c478fb96fe1dddbc3ec68dc5f4e991d324f"
+    },
+    "bifrost": {
+      "id": "9e5a21da164a3240d5ffd1c4e8d8591d01260df45c46f332596138195204db39",
+      "image": "sha256:54f62d143c37d5508cd4211d54751e9b686f503b2582bf0ac3e772b596b29520",
+      "started": "2026-11-01T05:24:42.033804517Z",
+      "running": true,
+      "restarts": 0,
+      "config_host_sha256": "c8ae10343e1dd6fd3621a140d2ffcad34976475e4310de51e944f49a6feb04a2"
+    },
+    "health": {
+      "generic": {
+        "status": 200,
+        "service": "shinewing-ai-gateway",
+        "version": "0.5.0",
+        "revision": "fd17c5ed9c93b0805deefb941915a83831127dd4",
+        "published_version": 18
+      },
+      "admin": {
+        "status": 200,
+        "service": "shinewing-ai-gateway-admin",
+        "version": null,
+        "revision": null,
+        "published_version": 18
+      },
+      "llm": {
+        "status": 200,
+        "service": "shinewing-llm-access-gateway",
+        "version": "0.5.0",
+        "revision": null,
+        "published_version": null
+      }
+    },
+    "native_route": {
+      "name": "gpu0-qwen36-thinking-alias",
+      "expression": "model == 'qwen3.6-27b-fp8-thinking'",
+      "target_provider": "gpu0",
+      "target_model": "qwen3.6-27b-fp8",
+      "key_pin": false,
+      "fallbacks": [],
+      "read_only_sqlite": true
+    }
+  },
+  "release_limits": {
+    "cli_producer_configured": false,
+    "production_enabled": false,
+    "whole_model_routing_release_qualified": false,
+    "production_registry_health_target_finance_key_policy": false,
+    "common_images_cache_compatibility": false,
+    "engine_abort_crash_financial_recovery": false,
+    "fixed_linux_release_rollback": false,
+    "native_tcp_pool_stress_qualified": false,
+    "native_tcp_pool_failure_rerun_this_increment": false,
+    "previous_full_utils_failure_preserved": true,
+    "public_paid_harness_run": false,
+    "public_harness_scope": "standalone CLI has no runtime registration path; actual canonical HTTP owned fixture used"
+  },
+  "logs_sha256": {
+    "sw-native-source-red.log": "c8c5881899f75fe42485e0474e40036d9a2500e9d6c193469a9602721ce6a1cc",
+    "sw-native-source-sdk-red.log": "d65e07ae3c49f4c7ee0d3b81e02e786e9842a4eec12b07107a40b788a48bbaf3",
+    "sw-native-source-final-race.jsonl": "0089d2ce6e229a42235a77af1d9778097f2bad06db785a05cd9550301ec5964f",
+    "sw-native-source-final-core-race.jsonl": "c8b2065ee11ab6a6b1c4d64fb9e076f40adb10676b70d898594ccb652a465939",
+    "sw-native-source-final-vet.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

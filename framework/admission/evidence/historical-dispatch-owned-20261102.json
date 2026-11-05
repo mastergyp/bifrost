@@ -1,0 +1,41 @@
+{
+  "passed": true,
+  "gateway_revision": "a82955cfea4c43aa846dd4eec532cd12723154a5",
+  "bifrost_revision": "4c25832cbca2721be46932dddaea05f2e0babb08",
+  "go_probe_sha256": "55df2e0d0fedb41b0de5eec90bd255b86fe1e1393e4514fa0e2bcbddac388f2b",
+  "executor_sha256": "329b6dbe47c6c2781d69ee7055907602a0f86649ee0b5b238066b88fd067fbd1",
+  "postgres_image": "sha256:108b27c919e6e7bc124350fb265deea9adac58e118eade428c6d1ad44b90debe",
+  "redis_image": "sha256:aa189b5a1954929c393585e6dc5717a75b18f75a931df8bdcc00a3d3bd546be6",
+  "owned_containers_removed": 2,
+  "production_accessed": false,
+  "real_model_calls": 0,
+  "paired_gateway_request_bifrost_http_factory_exercised": false,
+  "production_physical_producer_registered": false,
+  "owned_bifrost_http_rust_producer_qualified": true,
+  "whole_model_routing_release_qualified": false,
+  "markers": [
+    {
+      "actual_upstream_calls": 2,
+      "caller_token_ignored": true,
+      "cross_language_go_verifier": true,
+      "original_ledger_rows": 2,
+      "original_scope_preserved": true,
+      "owned_gateway_http_delegation_passed": true,
+      "raw_controls_frozen": true
+    }
+  ],
+  "original_completed_ledger_rows": 2,
+  "gateway_http_log_sha256": "d3147df84dc28f7313b079d6f56e9cfa207caf603e221dbe5dec2aaa74fa55ec",
+  "owned_physical_control": {
+    "passed": true,
+    "absolute_deadline_checked": true,
+    "actual_go_rust_mock_inference_passed": true,
+    "actual_bifrost_http_rust_producer_cases": 8,
+    "selected_target_denial_before_data_checked": true,
+    "historical_dispatch_cancellation_checked": true,
+    "cancel_dispatch_races": 16,
+    "producer_probe_sha256": "8d06b65aabc493d8c94e99d35e2c414002a1888c740d049b2f5b6723014901f7",
+    "original_regressions_log_sha256": "42b50b780909a0efbec478858e1d3aa48c4b34c29844657fd28162639c7c3ba9",
+    "control_log_sha256": "73b28e68e7058687b2f208d73829add3d5845cd043863a1418da14a7a5a3e3f4"
+  }
+}

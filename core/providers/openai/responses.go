@@ -655,9 +655,8 @@ func ToOpenAIResponsesRequest(ctx *schemas.BifrostContext, bifrostReq *schemas.B
 	if params != nil {
 		req.ResponsesParameters = *params
 		req.ServiceTier = serviceTierForModel(caps, req.ServiceTier)
-		if req.ResponsesParameters.MaxOutputTokens != nil && *req.ResponsesParameters.MaxOutputTokens < MinMaxCompletionTokens {
-			req.ResponsesParameters.MaxOutputTokens = schemas.Ptr(MinMaxCompletionTokens)
-		}
+		// Keep the explicit upper bound; let the backend validate its minimum
+		// instead of silently increasing the caller's generation budget.
 		// Drop user field if it exceeds OpenAI's 64 character limit
 		req.ResponsesParameters.User = SanitizeUserField(req.ResponsesParameters.User)
 		// Fable 5.1+ rejects forced tool use outright. Drop the choice so the model

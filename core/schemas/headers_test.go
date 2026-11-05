@@ -7,16 +7,17 @@ import "testing"
 // covering the identity-aware-proxy headers IsSensitiveHeader now matches.
 func TestRedactSensitiveHeaders(t *testing.T) {
 	in := map[string]string{
-		"cf-access-jwt-assertion": "eyJ.jwt.sig",
-		"x-amzn-oidc-data":        "eyJ.jwt.sig",
-		"authorization":           "Bearer sk-ant",
-		"x-api-key":               "sk-key",
-		"x-app":                   "cli",
-		"anthropic-beta":          "interleaved-thinking-2025-05-14",
+		"cf-access-jwt-assertion":       "eyJ.jwt.sig",
+		"x-amzn-oidc-data":              "eyJ.jwt.sig",
+		"authorization":                 "Bearer sk-ant",
+		"X-SW-Gateway-Delegation-Token": "owned-sensitive-attestation",
+		"x-api-key":                     "sk-key",
+		"x-app":                         "cli",
+		"anthropic-beta":                "interleaved-thinking-2025-05-14",
 	}
 	out := RedactSensitiveHeaders(in)
 
-	redacted := []string{"cf-access-jwt-assertion", "x-amzn-oidc-data", "authorization", "x-api-key"}
+	redacted := []string{"cf-access-jwt-assertion", "x-amzn-oidc-data", "authorization", "x-api-key", "X-SW-Gateway-Delegation-Token"}
 	for _, k := range redacted {
 		if out[k] != RedactedAttrValue {
 			t.Errorf("%q = %q, want %q", k, out[k], RedactedAttrValue)

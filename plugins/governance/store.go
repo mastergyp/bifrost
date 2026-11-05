@@ -4246,32 +4246,28 @@ func (gs *LocalGovernanceStore) UpdateModelConfigInMemory(ctx context.Context, m
 
 	// Clone to avoid modifying the original
 	clone := *mc
+	clone.Budgets = append([]configstoreTables.TableBudget(nil), mc.Budgets...)
 
 	// Store associated budgets, preserving existing in-memory usage per budget ID and
 	// stamping calendar alignment from the model config (consumed by the reset path).
 	for i := range clone.Budgets {
 		b := &clone.Budgets[i]
 		b.IsCalendarAligned = clone.CalendarAligned
-		if existingBudgetValue, exists := gs.budgets.Load(b.ID); exists && existingBudgetValue != nil {
-			if eb, ok := existingBudgetValue.(*configstoreTables.TableBudget); ok && eb != nil {
-				b.CurrentUsage = eb.CurrentUsage
-				b.LastReset = eb.LastReset
-			}
+		gs.UpsertBudgetConfig(ctx, b.ID, b)
+		if live := gs.LoadBudget(ctx, b.ID); live != nil {
+			*b = *live
 		}
-		gs.storeBudget(b.ID, b)
 	}
 
 	// Store associated rate limit if exists, preserving existing in-memory usage and
 	// stamping calendar alignment from the owning model config.
 	if clone.RateLimit != nil {
-		clone.RateLimit.IsCalendarAligned = clone.CalendarAligned
-		if existingRateLimitValue, exists := gs.rateLimits.Load(clone.RateLimit.ID); exists && existingRateLimitValue != nil {
-			if erl, ok := existingRateLimitValue.(*configstoreTables.TableRateLimit); ok && erl != nil {
-				clone.RateLimit.TokenCurrentUsage = erl.TokenCurrentUsage
-				clone.RateLimit.RequestCurrentUsage = erl.RequestCurrentUsage
-			}
-		}
-		gs.rateLimits.Store(clone.RateLimit.ID, clone.RateLimit)
+		config := *clone.RateLimit
+		config.IsCalendarAligned = clone.CalendarAligned
+		// The existing CAS merge preserves counts AND window anchors, including
+		// concurrent completions/resets between a DB reload and publication.
+		gs.UpsertRateLimitConfig(ctx, config.ID, &config)
+		clone.RateLimit = gs.LoadRateLimit(ctx, config.ID)
 	}
 
 	// Determine the (scope-aware) key. Global scope keeps the historical key format;

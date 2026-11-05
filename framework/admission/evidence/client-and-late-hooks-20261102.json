@@ -1,0 +1,21 @@
+{
+  "candidate_only": true,
+  "production_changed": false,
+  "pipeline_hook_registered": false,
+  "core_cancel_red": {
+    "failed_for_expected_late_post_hooks": true,
+    "sha256": "a5e1cc5ea09fe3163deb7b96443e069789d6c57738dd53369ba80ab0c10a50b8"
+  },
+  "core_cancel_green_race": {
+    "passed": true,
+    "sha256": "4ca0387646e4123e0a4e9529de89b3923cd894151ccc6b63b71de34b709cb23a"
+  },
+  "unix_client_go_race": {
+    "passed": true,
+    "test_pass_events": 26,
+    "owned_rust_probes_not_run_in_ordinary_unit_test": true,
+    "sha256": "5e76bf951d36128f0a17c631048ef82cababd0a967d7da94dd84e12f7b0b3ae4"
+  },
+  "go_vet_admission_passed": true,
+  "claim_limit": "Tests prove that late chunks reach post-hooks and Unix transport bounds; not original-grant billing settlement, real GPU abort, all-entry activation or production qualification."
+}

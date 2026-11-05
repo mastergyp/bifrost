@@ -1,0 +1,156 @@
+{
+  "active": 0,
+  "actual_application_start_control": true,
+  "actual_gateway_frontend": {
+    "active_employee_leases": 0,
+    "actual_gateway_http_success_cases": 6,
+    "direct_helper_model_denied": 403,
+    "employee_actual_units": 72,
+    "employee_ledger_rows": 7,
+    "original_bifrost_governance": {
+      "actual_gateway_model_calls": 8,
+      "captured_claims": [
+        {
+          "allowed_aliases": [
+            "sw-glm",
+            "sw-qwen"
+          ],
+          "call_id": "eb24539c-0d8a-4795-8a3e-8af699405b31",
+          "purpose": "main",
+          "root_id": "b0a32773-0f90-4e37-8ca7-5d43deabf254",
+          "session_hash": "8086c7d32c6495a3d01b4406e3ba7eb2b494d0b4f8939d831d7baea22b7e651a",
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "45bdd6f945d178484d9d0f0256fa153ba8107dd06839bf52d04f98b9c292bd2e"
+        },
+        {
+          "allowed_aliases": [
+            "sw-glm",
+            "sw-qwen"
+          ],
+          "call_id": "dc85cde4-919a-4b66-bbc6-e10c0a87fb14",
+          "purpose": "main",
+          "root_id": "b80f0103-9ca1-4268-9455-80299f9c20c6",
+          "session_hash": "a24b72c87a6c88627d617af0e3c1b536a648c92bcf39b2a64291f28f0b4ace8a",
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "45bdd6f945d178484d9d0f0256fa153ba8107dd06839bf52d04f98b9c292bd2e"
+        },
+        {
+          "allowed_aliases": [
+            "sw-glm",
+            "sw-qwen"
+          ],
+          "call_id": "ce3bcb7b-462a-4d8e-a80e-d5583409a0ef",
+          "purpose": "main",
+          "root_id": "1c1074be-d635-41a3-a123-c3a3b4a2de88",
+          "session_hash": "808cd9e61bae4363aad306606cae2d1bde6f7292f42474780f22017201cfb302",
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "45bdd6f945d178484d9d0f0256fa153ba8107dd06839bf52d04f98b9c292bd2e"
+        },
+        {
+          "allowed_aliases": [
+            "sw-glm",
+            "sw-qwen"
+          ],
+          "call_id": "4c6ede03-873c-405f-a8f6-134e6e85d4e3",
+          "purpose": "main",
+          "root_id": "cfbacc59-fde9-4d57-bdef-a46dbf8a66a8",
+          "session_hash": "b8538f73b5ea22cbd5edc6c99040d3768913892c8aede258bc29c1599bb13fd3",
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "45bdd6f945d178484d9d0f0256fa153ba8107dd06839bf52d04f98b9c292bd2e"
+        },
+        {
+          "allowed_aliases": [
+            "sw-qwen"
+          ],
+          "call_id": "55b19bfe-74c4-4e2a-8e12-712f1521e4cf",
+          "purpose": "vision_bridge",
+          "root_id": "0155c4ec-6535-4e5b-a199-1b40fe2ee377",
+          "session_hash": null,
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "b133400fa17ba1483a035a9c621a10d6c88a76109eff855915b90ce6c45e3a7c"
+        },
+        {
+          "allowed_aliases": [
+            "sw-glm"
+          ],
+          "call_id": "0d034817-2d11-4c91-b7fb-bcf5bec4b232",
+          "purpose": "main",
+          "root_id": "0155c4ec-6535-4e5b-a199-1b40fe2ee377",
+          "session_hash": "76b1c721b8be5fa4bff41b708d076875f744465f847146c9d35f9a96e09825c1",
+          "source_alias": "sw-glm",
+          "status": 200,
+          "subject_hash": "45bdd6f945d178484d9d0f0256fa153ba8107dd06839bf52d04f98b9c292bd2e"
+        },
+        {
+          "allowed_aliases": [
+            "sw-qwen"
+          ],
+          "call_id": "5c137ca0-a096-4b17-b95b-72d21e8133fb",
+          "purpose": "image_observation",
+          "root_id": "c868aa58-f4c4-472f-85c2-769dc6ae5960",
+          "session_hash": null,
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "96d4098f272b126898974c4c0b8a6b82c6f4bb75ddb02d5adfd4d57af74c0d0a"
+        },
+        {
+          "allowed_aliases": [
+            "sw-glm",
+            "sw-qwen"
+          ],
+          "call_id": "56b8c433-de52-4d1c-87ca-e8afe882e5e8",
+          "purpose": "main",
+          "root_id": "c868aa58-f4c4-472f-85c2-769dc6ae5960",
+          "session_hash": "814f15f02c36bb07bf17ba9ca3d45241bd8add56b97e3a2a942416527dea8d3b",
+          "source_alias": "sw-qwen",
+          "status": 200,
+          "subject_hash": "45bdd6f945d178484d9d0f0256fa153ba8107dd06839bf52d04f98b9c292bd2e"
+        }
+      ],
+      "original_governance_budget_delta": 0.0002405,
+      "original_governance_requests_delta": 8,
+      "original_governance_tokens_delta": 56,
+      "passed": true
+    },
+    "readiness_failures_before_employee_reserve": 7,
+    "real_identity_provider": false,
+    "redis_rpm": 7,
+    "redis_tpm_daily_monthly": 72,
+    "same_model_five_image_adaptation": true,
+    "same_original_root": true,
+    "vision_helper_session_binding_rows": 0
+  },
+  "actual_go_profile_loader": true,
+  "authority_missing_rejected": 409,
+  "durable_rejection_dispatch_races": 12,
+  "finished_rows": 24,
+  "glm_calls": 7,
+  "glm_overflow_calls": 6,
+  "go_http_cases": 8,
+  "go_pre_ticket_rejection_replays": 4,
+  "managed_employee_gate_preserved": true,
+  "mock_inference_calls": 16,
+  "native_and_employee_default_queue_weight": 1,
+  "passed": true,
+  "qwen_calls": 9,
+  "real_gpu_or_user_credentials": false,
+  "schema": "planner_fixture_8832570d72d1465b8729f3686b132217",
+  "schema_removed": true,
+  "socket_removed": true,
+  "synthetic_primary_hold_rows": 2,
+  "synthetic_race_dispatched_rows": 6,
+  "source_revisions": {
+    "gateway": "20143412d7fd588fc2228e2055249748554f2b94",
+    "bifrost": "913d9f242eb1c7122b9793814c665cf03fa05e54"
+  },
+  "probe_sha256": "a05be6353dbb9786cc293246a5a70718ae571198f9ac6b5b1e7b1c0d04989e58",
+  "host_platform": "Darwin x86_64",
+  "executor_sha256": "feece32311d17b0bd857caf9f84a936dce50a494511111ae316987575c6f10a8",
+  "owned_container_removed": true,
+  "owned_redis_removed": true
+}

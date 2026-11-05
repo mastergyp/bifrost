@@ -1,0 +1,36 @@
+{
+  "stream_phase_red": "Two real pipe idle cases failed expected missing selected-provider/phase assertions, not compilation.",
+  "stream_phase_green": "Selected gpu1 over parent/source gpu0; raw-read blocked vs between-reads after progress; unknown provider/model excluded. Existing error identities/messages/status/fallback unchanged.",
+  "utils_full_seconds": 34.389,
+  "admission_full_seconds": 0.965,
+  "python_build_tests": 6,
+  "dependency_docker_fixture": {
+    "passed": true,
+    "base_image": "sha256:83848d7ab1e24c5f8f5e06ee186492284a21d1a2a6dcd789a6531bd33d58dd54",
+    "historical_revision": "9abd33f4120d45a79539ce739791636e067c6819",
+    "dockerfile_sha256": "fef1abdbf51530033a91a175dee3cff485d012163e7a7fdd446346667cd0614e",
+    "old_runtime_edit_invalidated_dependency_image": true,
+    "new_runtime_edit_retained_dependency_image": true,
+    "owned_image_tags_removed": [
+      "sw-owned-dependency-cache:67bac0f41a5848ee833e8755169c0a65-old-0",
+      "sw-owned-dependency-cache:67bac0f41a5848ee833e8755169c0a65-old-1",
+      "sw-owned-dependency-cache:67bac0f41a5848ee833e8755169c0a65-new-0",
+      "sw-owned-dependency-cache:67bac0f41a5848ee833e8755169c0a65-new-1"
+    ],
+    "production_actions": 0,
+    "real_go_download_or_application_build": false
+  },
+  "manifest_only_local_offline_check": {
+    "manifest_only_go_download_exit": 1,
+    "elapsed_seconds": 0.072,
+    "network_disabled": true,
+    "go_toolchain": "1.27.0 darwin-amd64",
+    "real_application_build": false,
+    "production_actions": 0,
+    "error_lines_without_content": 444
+  },
+  "offline_check_limit": "444 uncached module metadata lookups blocked by GOPROXY=off; no application build or production mutation. Linux artifact build remains required.",
+  "fixture_initial_failures": "Bare imageID FROM parsed as registry sha256 repository, failed before any fixture tag; switched to pre-existing immutable Rust RepoDigest. No production effect.",
+  "wire_visible_change": false,
+  "provider_harness_exemption": "Only finite structured log labels/progress and build layout/preflight; no HTTP request or response behavior changes."
+}

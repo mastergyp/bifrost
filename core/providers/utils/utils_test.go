@@ -5,8 +5,10 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -3721,5 +3723,172 @@ func TestRewriteToolSchemaPatterns_DescendsIntoPlainMapSchemas(t *testing.T) {
 	clean["sentinel"] = true
 	if c2, _ := updated.Properties.Get("clean"); c2.(map[string]any)["sentinel"] != true {
 		t.Fatal("an unchanged plain-map schema was copied instead of shared")
+	}
+}
+
+// Diagnostic events must be bounded and must not change the caller's error.
+type failureDiagnosticLogger struct {
+	testLogger
+	fields map[string]string
+	events int
+}
+
+func (l *failureDiagnosticLogger) LogHTTPRequest(_ schemas.LogLevel, event string) schemas.LogEventBuilder {
+	l.events++
+	l.fields = map[string]string{"event": event}
+	return &failureDiagnosticEvent{logger: l}
+}
+
+type failureDiagnosticEvent struct{ logger *failureDiagnosticLogger }
+
+func (e *failureDiagnosticEvent) Str(k, v string) schemas.LogEventBuilder {
+	e.logger.fields[k] = v
+	return e
+}
+func (e *failureDiagnosticEvent) Int(string, int) schemas.LogEventBuilder     { return e }
+func (e *failureDiagnosticEvent) Int64(string, int64) schemas.LogEventBuilder { return e }
+func (e *failureDiagnosticEvent) Send()                                       {}
+func TestProcessAndSendErrorBoundedDiagnostic(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		code string
+	}{
+		{"idle", fmt.Errorf("wrapped: %w", ErrStreamIdleTimeout), "stream_idle_timeout"},
+		{"cancel", context.Canceled, "stream_cancelled"},
+		{"deadline", context.DeadlineExceeded, "stream_deadline"},
+		{"truncated", io.ErrUnexpectedEOF, "stream_unexpected_eof"},
+		{"eof", io.EOF, "stream_eof"},
+		{"timeout", &net.OpError{Op: "read", Err: context.DeadlineExceeded}, "stream_deadline"},
+		{"network-timeout", &net.DNSError{IsTimeout: true}, "stream_read_timeout"},
+		{"opaque", errors.New("synthetic-private-marker"), "stream_read_error"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+			defer ctx.Cancel()
+			logger := &failureDiagnosticLogger{}
+			ch := make(chan *schemas.BifrostStreamChunk, 1)
+			ProcessAndSendError(ctx, func(_ *schemas.BifrostContext, r *schemas.BifrostResponse, e *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError) {
+				return r, e
+			}, tc.err, ch, logger, nil)
+			chunk := <-ch
+			if logger.events != 1 || logger.fields["code"] != tc.code || logger.fields["event"] != "bifrost_stream_read_failure" {
+				t.Fatalf("missing bounded diagnostic: %#v", logger.fields)
+			}
+			if len(logger.fields) != 2 {
+				t.Fatalf("unexpected diagnostic data: %#v", logger.fields)
+			}
+			e := chunk.BifrostError
+			if e == nil || !e.IsBifrostError || e.StatusCode != nil || e.Type != nil || e.AllowFallbacks != nil || e.Error.Code != nil || e.Error.Type != nil || !errors.Is(e.Error.Error, tc.err) {
+				t.Fatal("diagnostic changed original error semantics")
+			}
+			if e.Error.Message != fmt.Sprintf("Error reading stream: %v", tc.err) {
+				t.Fatal("caller error was rewritten")
+			}
+		})
+	}
+}
+
+func TestIdleReaderEmitsBoundedDiagnostic(t *testing.T) {
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	defer ctx.Cancel()
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	idle, stop := NewIdleTimeoutReader(reader, reader, 20*time.Millisecond, ctx)
+	defer stop()
+	_, err := idle.Read(make([]byte, 1))
+	if !errors.Is(err, ErrStreamIdleTimeout) {
+		t.Fatalf("expected real idle expiry, got %v", err)
+	}
+	logger := &failureDiagnosticLogger{}
+	ch := make(chan *schemas.BifrostStreamChunk, 1)
+	ProcessAndSendError(ctx, func(_ *schemas.BifrostContext, r *schemas.BifrostResponse, e *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError) {
+		return r, e
+	}, err, ch, logger, nil)
+	<-ch
+	if logger.fields["code"] != "stream_idle_timeout" || len(logger.fields) != 2 {
+		t.Fatalf("bad diagnostic: %#v", logger.fields)
+	}
+}
+
+func TestIdleDiagnosticSelectedProviderAndReadPhase(t *testing.T) {
+	for _, between := range []bool{false, true} {
+		t.Run(fmt.Sprint(between), func(t *testing.T) {
+			parent := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+			defer parent.Cancel()
+			primary := schemas.ModelProvider("gpu0")
+			parent.SetRoutingInfoSnapshot(schemas.RoutingInfo{Provider: "gpu1", PrimaryProvider: &primary, Model: "private-model-must-not-log"})
+			ctx := schemas.NewBifrostContext(context.WithoutCancel(parent), schemas.NoDeadline)
+			defer ctx.Cancel()
+			reader, writer := io.Pipe()
+			defer writer.Close()
+			idle, stop := NewIdleTimeoutReader(reader, reader, 25*time.Millisecond, ctx)
+			defer stop()
+			if between {
+				go func() { _, _ = writer.Write([]byte("x")) }()
+				if n, err := idle.Read(make([]byte, 1)); n != 1 || err != nil {
+					t.Fatalf("initial progress: %d %v", n, err)
+				}
+				time.Sleep(60 * time.Millisecond)
+			}
+			_, err := idle.Read(make([]byte, 1))
+			if !errors.Is(err, ErrStreamIdleTimeout) {
+				t.Fatalf("expected idle, got %v", err)
+			}
+			logger := &failureDiagnosticLogger{}
+			ch := make(chan *schemas.BifrostStreamChunk, 1)
+			ProcessAndSendError(ctx, func(_ *schemas.BifrostContext, r *schemas.BifrostResponse, e *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError) {
+				return r, e
+			}, err, ch, logger, nil)
+			<-ch
+			phase, progress := "read_blocked", "none"
+			if between {
+				phase, progress = "between_reads", "some"
+			}
+			if logger.fields["selected_provider"] != "gpu1" || logger.fields["idle_phase"] != phase || logger.fields["read_progress"] != progress || len(logger.fields) != 5 {
+				t.Fatalf("missing selected-provider/reader metadata: %#v", logger.fields)
+			}
+		})
+	}
+}
+
+func TestReadDiagnosticDoesNotLogUnknownProviderOrPrivateModel(t *testing.T) {
+	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	defer ctx.Cancel()
+	ctx.SetRoutingInfoSnapshot(schemas.RoutingInfo{Provider: "synthetic-private-provider", Model: "synthetic-private-model"})
+	logger := &failureDiagnosticLogger{}
+	ch := make(chan *schemas.BifrostStreamChunk, 1)
+	ProcessAndSendError(ctx, func(_ *schemas.BifrostContext, r *schemas.BifrostResponse, e *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError) {
+		return r, e
+	}, io.ErrUnexpectedEOF, ch, logger, nil)
+	<-ch
+	if len(logger.fields) != 2 {
+		t.Fatalf("private model/provider data escaped: %#v", logger.fields)
+	}
+}
+
+func TestBoundStreamDiagnosticDoesNotChangeOrFallBackToSourceRoute(t *testing.T) {
+	for _, selected := range []schemas.ModelProvider{"gpu1", "unknown-private-provider"} {
+		ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+		original := schemas.RoutingInfo{Provider: "gpu0", Model: "private-source-model"}
+		ctx.SetRoutingInfoSnapshot(original)
+		BindManagedStreamReadDiagnostic(ctx, selected)
+		if ctx.Value(schemas.BifrostContextKeyRoutingInfo).(schemas.RoutingInfo).Provider != original.Provider {
+			t.Fatal("diagnostic binding changed routing identity")
+		}
+		logger := &failureDiagnosticLogger{}
+		ch := make(chan *schemas.BifrostStreamChunk, 1)
+		ProcessAndSendError(ctx, func(_ *schemas.BifrostContext, r *schemas.BifrostResponse, e *schemas.BifrostError) (*schemas.BifrostResponse, *schemas.BifrostError) {
+			return r, e
+		}, io.ErrUnexpectedEOF, ch, logger, nil)
+		<-ch
+		if selected == "gpu1" {
+			if logger.fields["selected_provider"] != "gpu1" || len(logger.fields) != 3 {
+				t.Fatalf("wrong selected diagnostic: %#v", logger.fields)
+			}
+		} else if len(logger.fields) != 2 {
+			t.Fatalf("unknown selected target fell back to source: %#v", logger.fields)
+		}
+		ctx.Cancel()
 	}
 }

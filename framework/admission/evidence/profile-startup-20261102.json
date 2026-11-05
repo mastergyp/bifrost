@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "source_revision": "ed0ffaa26fac74d9261b179e14d0223f8ac9898b",
+  "passed": true,
+  "validation": {
+    "admission": {
+      "package": "github.com/maximhq/bifrost/framework/admission",
+      "test_events": {
+        "pass": 110,
+        "skip": 3
+      },
+      "log_sha256": "a2214c828ad42bc70660c96eaeb5cd3455236293f184e4cedefed0535eca1aec"
+    },
+    "startup": {
+      "package": "github.com/maximhq/bifrost/transports/bifrost-http/server",
+      "test_events": {
+        "pass": 3
+      },
+      "log_sha256": "16dabc2ba57352524e97b3e61a29445980064a2e0180d827ec1697866fd25200"
+    },
+    "original_http": {
+      "package": "github.com/mastergyp/bifrost-tests/managedadmission",
+      "test_events": {
+        "pass": 72,
+        "skip": 2
+      },
+      "log_sha256": "6b6bd2f19a31f2e79e26124d6b95e66b327cfc892fe6e20b5174462be77dae39"
+    }
+  },
+  "vet_passed": true,
+  "rust_preparation_endpoint_implemented": false,
+  "production_managed_routing_activated": false,
+  "production_changed_by_this_increment": false,
+  "real_user_keys_or_models_changed": false,
+  "original_governance_preserved": true,
+  "startup_helper_qualified": true,
+  "full_bootstrap_signal_to_exit_qualified": false,
+  "controller_authority_pinned": true,
+  "real_rust_authority_enforcement_qualified": false,
+  "gpu_inference_requests_sent": 0,
+  "owned_unix_listeners_cleaned": true,
+  "openapi_tokenize_source": {
+    "glm": "http://10.100.1.14:8710/openapi.json",
+    "deepseek": "http://10.100.1.3:8080/openapi.json"
+  },
+  "observed_tokenizer_input_schemas": {
+    "glm": [
+      "TokenizeChatRequest",
+      "TokenizeCompletionRequest"
+    ],
+    "deepseek": [
+      "TokenizeChatRequest",
+      "TokenizeCompletionRequest"
+    ]
+  },
+  "setup_failures_retained": [
+    "Initial compile used a different incomplete local module cache; normal verified installed toolchain and existing default module cache then compiled.",
+    "Startup fixture initially lacked the context and logger that Bootstrap sets; corrected fixture, not counted as a product red/green."
+  ],
+  "remaining": [
+    "Rust preparation/authority endpoint and executable sender startup",
+    "Qualified context/Responses/tools/images and target health/quality contract",
+    "Production immutable graph plus complete-ingress integration and focused real inference",
+    "Durable unresolved-budget recovery remains separate"
+  ]
+}

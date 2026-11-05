@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "app_revision": "0979610cc00de8827af7fd7f62cef6c404dde1f2",
+  "app_image": "sha256:33e040edbc7cfb6fc33aea943fdfc9a8bc18f603dce21f008bb817444bde5372",
+  "source": "487bb9dc36c8661e87cb91940c5b4e2707740b9c0cd46d389fc27a82d6fc12dd",
+  "source_image": "sha256:3f89bb8f2acf3eefb342fe68fef6d952298941debfc6f95d3c7d85d2ece59f06",
+  "purpose": "e2e-availability"
+}

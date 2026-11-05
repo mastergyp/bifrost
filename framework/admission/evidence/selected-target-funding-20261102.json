@@ -1,0 +1,572 @@
+{
+  "passed": true,
+  "scope": "isolated selected-target Bifrost funding and managed route metadata; not production activation",
+  "gateway_qualified_revision": "6d5c018ceaf2eee04be1209a95e191a46a7c6ae2",
+  "bifrost_qualified_revision": "e73125b87fec6778ea014a2eb224080f03cfb05e",
+  "selected_target_checks_after_queue_before_data_io": true,
+  "opaque_funding_exact_provider_model_and_request_type_required": true,
+  "funding_bound_by_producer_to_original_request_grant": true,
+  "original_grant_limits_identity_not_replaced": true,
+  "original_and_target_payers_unioned_deduplicated": true,
+  "selected_target_model_used_for_pricing_and_routing_metadata": true,
+  "accepted_usage_uses_frozen_payers_after_cancellation_and_config_change": true,
+  "spending_checks_skips_and_named_provider_key_pins_refused_in_this_profile": true,
+  "keyless_empty_key_lists_preserved": true,
+  "nonempty_named_key_restrictions_still_refused": true,
+  "approval_lifetime_max_seconds": 2,
+  "new_atomic_money_reservation": false,
+  "durable_cross_process_financial_recovery": false,
+  "red_green": {
+    "ignored_selected_denial_returned_success_before_fix": true,
+    "cancel_during_selected_validation_sent_request_before_direct_parent_check": true,
+    "old_core_overlay_lost_selected_route_on_unary_and_streaming": true,
+    "empty_key_list_initially_refused_existing_keyless_grants": true,
+    "compile_and_fixture_setup_errors_counted_as_red": false
+  },
+  "checks": {
+    "admission_race_pass_events": 67,
+    "admission_ordinary_owned_skips": 3,
+    "sdk_http_race_pass_events": 55,
+    "sdk_http_ordinary_owned_skip": 1,
+    "full_governance_race_pass_events": 617,
+    "full_governance_skip": 1,
+    "managed_core_race_pass_events": 12,
+    "managed_core_source_unchanged_since_core_race": true,
+    "extra_target_budget_nonzero_pricing_governance_shapes": 4,
+    "cancel_and_config_change_usage_settlement_once": true,
+    "selected_policy_denial_and_target_pool_scope_funding_type_mismatch_no_data_no_spend": true,
+    "parent_cancel_repetitions": 20,
+    "vet_passed": true,
+    "rust_fmt_passed": true,
+    "rust_strict_clippy_all_targets_passed": true
+  },
+  "owned_rust": {
+    "passed": true,
+    "absolute_deadline_checked": true,
+    "actual_go_rust_mock_inference_passed": true,
+    "actual_bifrost_http_rust_producer_cases": 8,
+    "selected_target_denial_before_data_checked": true,
+    "producer_probe_sha256": "78dc3cd27729f6a1124ee33348bd47baac4634ceb5e6d859dcbbc0e4b3bc0ca0",
+    "original_regressions_log_sha256": "322cc9aee91a384b690bc3f6fb32232273d07a771a496c65fa4e4da9fcc58f62",
+    "control_log_sha256": "ea7d8818b01bcaf6428732ff1aa3f000947492f51dcccb59d3f603ee9c3b91f0"
+  },
+  "original_pg_redis_tests_passed": 121,
+  "ordinary_opt_in_ignored": 6,
+  "concurrent_capacity_requests": 100,
+  "all_four_go_owned_probes_explicitly_run": true,
+  "physical_active_at_end": 0,
+  "owned_containers_removed": 2,
+  "independent_gateway_verifier": {
+    "original_ledger_rows": 2,
+    "same_request_as_bifrost_frontend": false
+  },
+  "owned_receipt_sha256": "2984b11e9ed03ff6fdfb7107f25009a765985608b3ccb1b6267752db5f785951",
+  "production_readonly_observation": {
+    "configuration": {
+      "providers": [
+        {
+          "provider": "gpu0",
+          "network": {
+            "base_url": "http://10.100.1.14:8080",
+            "default_request_timeout_in_seconds": 300,
+            "max_retries": 0
+          },
+          "worker_limits": {
+            "concurrency": 16,
+            "buffer_size": 256
+          },
+          "base_provider_type": "openai",
+          "models": []
+        },
+        {
+          "provider": "gpu1",
+          "network": {
+            "base_url": "http://10.100.1.3:8080",
+            "default_request_timeout_in_seconds": 300,
+            "max_retries": 0
+          },
+          "worker_limits": {
+            "concurrency": 36,
+            "buffer_size": 576
+          },
+          "base_provider_type": "openai",
+          "models": []
+        },
+        {
+          "provider": "gpu2",
+          "network": {
+            "base_url": "http://10.100.1.14:8710",
+            "default_request_timeout_in_seconds": 300,
+            "max_retries": 0
+          },
+          "worker_limits": {
+            "concurrency": 8,
+            "buffer_size": 128
+          },
+          "base_provider_type": "openai",
+          "models": []
+        }
+      ],
+      "target_financial_rules": [
+        {
+          "model": "*",
+          "provider": null,
+          "scope": "virtual_key",
+          "budget": false,
+          "rate": true
+        },
+        {
+          "model": "*",
+          "provider": null,
+          "scope": "virtual_key",
+          "budget": false,
+          "rate": true
+        }
+      ],
+      "key_columns": [
+        "id",
+        "name",
+        "provider_id",
+        "provider",
+        "key_id",
+        "value",
+        "models_json",
+        "blacklisted_models_json",
+        "weight",
+        "enabled",
+        "created_at",
+        "updated_at",
+        "config_hash",
+        "aliases_json",
+        "azure_endpoint",
+        "azure_client_id",
+        "azure_client_secret",
+        "azure_tenant_id",
+        "azure_scopes",
+        "vertex_project_id",
+        "vertex_project_number",
+        "vertex_region",
+        "vertex_auth_credentials",
+        "bedrock_access_key",
+        "bedrock_secret_key",
+        "bedrock_session_token",
+        "bedrock_region",
+        "bedrock_arn",
+        "bedrock_role_arn",
+        "bedrock_external_id",
+        "bedrock_role_session_name",
+        "bedrock_batch_s3_config_json",
+        "vllm_url",
+        "vllm_model_name",
+        "replicate_use_deployments_endpoint",
+        "ollama_url",
+        "sgl_url",
+        "use_for_batch_api",
+        "status",
+        "description",
+        "encryption_status",
+        "bedrock_mantle_access_key",
+        "bedrock_mantle_secret_key",
+        "bedrock_mantle_session_token",
+        "bedrock_mantle_region",
+        "bedrock_mantle_role_arn",
+        "bedrock_mantle_external_id",
+        "bedrock_mantle_role_session_name",
+        "vertex_force_single_region",
+        "bedrock_project_id",
+        "bedrock_mantle_project_id",
+        "use_anthropic_endpoints",
+        "bedrock_batch_role_arn",
+        "bedrock_endpoints_json",
+        "bedrock_mantle_endpoints_json",
+        "databricks_workspace_url",
+        "databricks_client_id",
+        "databricks_client_secret",
+        "databricks_api_format",
+        "databricks_forward_gateway_tags",
+        "github_copilot_app_id",
+        "github_copilot_installation_id",
+        "github_copilot_repository_id",
+        "github_copilot_private_key",
+        "github_copilot_github_domain",
+        "use_openai_endpoints"
+      ]
+    },
+    "active_model_components": [
+      {
+        "host": "sw-tencent-ai-01",
+        "name": "qwen38-vllm-router",
+        "id": "6c6f36fa6f8d2cfa173470fe5ebf2e12f573facee94a5579fe0ae59a117f62b4",
+        "image": "sha256:88f52f3d58a505b7e1ad96ca6969478517bcccb58418e75a54223271a64da7df",
+        "running": true,
+        "started": "2026-11-02T06:28:15.111399196Z",
+        "restarts": 0,
+        "flags": {},
+        "config_host_sha256": "6a58cb0ac4cf16a05394d9a9bd4ab3aab8f0698c8144ab226ca39a8889f56f5a",
+        "network_endpoints": {
+          "host": {
+            "ip": ""
+          }
+        }
+      },
+      {
+        "host": "sw-tencent-ai-01",
+        "name": "glm53-flash-tp4",
+        "id": "feff7bd65271bedaaddd4900dcc1daa1508e771dae770c265e2c17e3d11325f2",
+        "image": "sha256:e2724157a3d5d3ca2a7c21d0627b600361825d7b0c1100ec43aaddd1bf4b9312",
+        "running": true,
+        "started": "2026-11-01T16:00:24.321826008Z",
+        "restarts": 0,
+        "flags": {
+          "--host": "0.0.0.0",
+          "--port": "8000",
+          "--served-model-name": "glm-5.3-flash",
+          "--tensor-parallel-size": "4",
+          "--tool-call-parser": "glm47",
+          "--reasoning-parser": "glm45",
+          "--max-model-len": "262144",
+          "--max-num-batched-tokens": "8192",
+          "--max-num-seqs": "8"
+        },
+        "config_host_sha256": "7d934e512f55ee2840665989653449ccf27a803b9a2fa10743ddf7db37f5bd47",
+        "network_endpoints": {
+          "glm53-flash_default": {
+            "ip": "172.26.0.2"
+          }
+        }
+      },
+      {
+        "host": "sw-tencent-ai-01",
+        "name": "qwen38-vllm-gpu3",
+        "id": "a7cebda5fb40b5207974db997603d34efcbc1e991ee149bc7a08674d8a0af6d7",
+        "image": "sha256:bd8a5d7a8774800c92d714c0c226b32c1863f929150f36efd610aebcd12a335d",
+        "running": true,
+        "started": "2026-10-31T01:12:46.598817582Z",
+        "restarts": 1,
+        "flags": {
+          "--served-model-name": "qwen3.8-27b",
+          "--host": "0.0.0.0",
+          "--port": "8000",
+          "--tensor-parallel-size": "1",
+          "--max-model-len": "262144",
+          "--max-num-seqs": "8",
+          "--max-num-batched-tokens": "8192",
+          "--reasoning-parser": "qwen3",
+          "--tool-call-parser": "qwen3_coder"
+        },
+        "config_host_sha256": "ca255942c55a60419a079f0de0cd0886e74dcb4b41e87bc6eff05aa4961da6ac",
+        "network_endpoints": {
+          "qwen38-vllm_default": {
+            "ip": "172.29.0.5"
+          },
+          "shinewing-qwen-serving-v1": {
+            "ip": "192.168.144.4"
+          }
+        }
+      },
+      {
+        "host": "sw-tencent-ai-01",
+        "name": "qwen38-vllm-gpu2",
+        "id": "5c9340e09071dcdfeb9d4210e0068e9405d866c17173e41d8a1fe1b355265ad3",
+        "image": "sha256:bd8a5d7a8774800c92d714c0c226b32c1863f929150f36efd610aebcd12a335d",
+        "running": true,
+        "started": "2026-10-31T01:04:52.273215108Z",
+        "restarts": 0,
+        "flags": {
+          "--served-model-name": "qwen3.8-27b",
+          "--host": "0.0.0.0",
+          "--port": "8000",
+          "--tensor-parallel-size": "1",
+          "--max-model-len": "262144",
+          "--max-num-seqs": "8",
+          "--max-num-batched-tokens": "8192",
+          "--reasoning-parser": "qwen3",
+          "--tool-call-parser": "qwen3_coder"
+        },
+        "config_host_sha256": "2afa0e5e074b4a998b2a424e708d1f960e0aa096949fed3b0ecadb9b4ca1ade9",
+        "network_endpoints": {
+          "qwen38-vllm_default": {
+            "ip": "172.29.0.7"
+          },
+          "shinewing-qwen-serving-v1": {
+            "ip": "192.168.144.3"
+          }
+        }
+      },
+      {
+        "host": "sw-tencent-ai-01",
+        "name": "llmd-qwen38-envoy",
+        "id": "b177e54f4608db9af0bc0cf11f17d798325c64f712a97212a0e9b70b3f2c334b",
+        "image": "sha256:3855673506f2c707afffb48a7de12a799df07c60ee9c0d5abb4fb68fc304e1a1",
+        "running": true,
+        "started": "2026-11-01T05:24:08.503541376Z",
+        "restarts": 0,
+        "flags": {},
+        "config_host_sha256": "aaea500d5d29029177718691164d2bbe5d6b0d241993377a89ca61abc7d153da",
+        "network_endpoints": {
+          "qwen38-vllm_default": {
+            "ip": "172.29.0.9"
+          },
+          "shinewing-qwen-serving-v1": {
+            "ip": "192.168.159.224"
+          }
+        }
+      },
+      {
+        "host": "sw-tencent-ai-01",
+        "name": "llmd-qwen38-epp",
+        "id": "748fdff50712363dec734cd3657ce0a881867fd27c95429894015a7097c6bef9",
+        "image": "sha256:5e4353ff49007f3a7e862b89515b53f2b3a857e2a1edcddba4f5b22c9d69522b",
+        "running": true,
+        "started": "2026-11-01T05:23:57.168739861Z",
+        "restarts": 0,
+        "flags": {},
+        "config_host_sha256": "2c4acf18a281e834f1eb0e5ef5d57afc59f9d9889d59203ca89f965c404974b3",
+        "network_endpoints": {
+          "qwen38-vllm_default": {
+            "ip": "172.29.0.8"
+          },
+          "shinewing-qwen-serving-v1": {
+            "ip": "192.168.159.225"
+          }
+        }
+      },
+      {
+        "host": "sw-tencent-ai-04",
+        "name": "deepseek-v41-private-router",
+        "id": "68f92e5f719935d520045f55e36a1754b02acd619e52936703da01675774774b",
+        "image": "sha256:88f52f3d58a505b7e1ad96ca6969478517bcccb58418e75a54223271a64da7df",
+        "running": true,
+        "started": "2026-11-02T06:28:59.451315525Z",
+        "restarts": 0,
+        "flags": {},
+        "config_host_sha256": "f99c3e478ac74db7ce6139a44c6184c61ce265fae5c4594eb2c0b18cdc3983e7",
+        "network_endpoints": {
+          "host": {
+            "ip": ""
+          }
+        }
+      },
+      {
+        "host": "sw-tencent-ai-04",
+        "name": "deepseek-v41-flash-1017",
+        "id": "b80c31bfbf8eebdeb390b3724c1c7b4bf035d30d8bda3f02732b6aee09ee48e9",
+        "image": "sha256:22f8a9cdc724e611342e33c28cd39371473f49deffb24f9723df59fb1cbc34cb",
+        "running": true,
+        "started": "2026-10-30T23:44:12.780153042Z",
+        "restarts": 0,
+        "flags": {
+          "--served-model-name": "deepseek-v4.1-flash-1017",
+          "--host": "0.0.0.0",
+          "--port": "8000",
+          "--tensor-parallel-size": "8",
+          "--reasoning-parser": "deepseek_v41",
+          "--tool-call-parser": "deepseek_v41",
+          "--max-model-len": "458752",
+          "--max-num-seqs": "36",
+          "--max-num-batched-tokens": "4096"
+        },
+        "config_host_sha256": "1d6f8964e2411c35ec50b948d841e25465e51afaecb4a41fbf1453f13a564bc4",
+        "network_endpoints": {
+          "deepseek-v41-flash-1017_default": {
+            "ip": "172.20.0.2"
+          }
+        }
+      }
+    ],
+    "qwen_front_router": {
+      "upstreams": [
+        {
+          "name": "vllm_workers",
+          "servers": [
+            "127.0.0.1:8602",
+            "127.0.0.1:8603"
+          ],
+          "least_conn": true
+        }
+      ],
+      "proxy_destinations": [
+        "http://vllm_workers"
+      ],
+      "location_names": [
+        "= /router_health ",
+        "/ "
+      ]
+    },
+    "private_endpoints": {
+      "read_only_endpoints": [
+        {
+          "provider": "gpu0",
+          "base_url": "http://10.100.1.14:8080",
+          "models": [
+            {
+              "id": "qwen3.8-27b",
+              "max_model_len": 262144
+            },
+            {
+              "id": "qwen3.6-27b-fp8",
+              "max_model_len": 262144
+            }
+          ],
+          "models_http": 200,
+          "metrics_http": 200,
+          "one_endpoint_scheduler_samples": [
+            "process_start_time_seconds 1.79340916535e+09",
+            "vllm:num_requests_running{engine=\"0\",model_name=\"qwen3.8-27b\"} 1.0",
+            "vllm:num_requests_waiting{engine=\"0\",model_name=\"qwen3.8-27b\"} 0.0"
+          ]
+        },
+        {
+          "provider": "gpu1",
+          "base_url": "http://10.100.1.3:8080",
+          "models": [
+            {
+              "id": "deepseek-v4.1-flash-1017",
+              "max_model_len": 458752
+            }
+          ],
+          "models_http": 200,
+          "metrics_http": 200,
+          "one_endpoint_scheduler_samples": [
+            "process_start_time_seconds 1.7934038518e+09",
+            "vllm:num_requests_running{engine=\"0\",model_name=\"deepseek-v4.1-flash-1017\"} 1.0",
+            "vllm:num_requests_waiting{engine=\"0\",model_name=\"deepseek-v4.1-flash-1017\"} 0.0"
+          ]
+        },
+        {
+          "provider": "gpu2",
+          "base_url": "http://10.100.1.14:8710",
+          "models": [
+            {
+              "id": "glm-5.3-flash",
+              "max_model_len": 262144
+            },
+            {
+              "id": "nvidia/GLM-5.3-Flash-NVFP4",
+              "max_model_len": 262144
+            }
+          ],
+          "models_http": 200,
+          "metrics_http": 200,
+          "one_endpoint_scheduler_samples": [
+            "process_start_time_seconds 1.79354882345e+09",
+            "vllm:num_requests_running{engine=\"0\",model_name=\"glm-5.3-flash\"} 0.0",
+            "vllm:num_requests_waiting{engine=\"0\",model_name=\"glm-5.3-flash\"} 0.0"
+          ]
+        }
+      ]
+    },
+    "key_scopes": {
+      "private_key_scopes": [
+        {
+          "provider": "gpu0",
+          "allow_all_keys": false,
+          "provider_config_count": 2
+        },
+        {
+          "provider": "gpu0",
+          "allow_all_keys": true,
+          "provider_config_count": 2
+        },
+        {
+          "provider": "gpu1",
+          "allow_all_keys": false,
+          "provider_config_count": 1
+        },
+        {
+          "provider": "gpu1",
+          "allow_all_keys": true,
+          "provider_config_count": 2
+        },
+        {
+          "provider": "gpu2",
+          "allow_all_keys": false,
+          "provider_config_count": 1
+        }
+      ]
+    },
+    "named_key_links": {
+      "private_key_scope_links": [
+        {
+          "provider": "gpu0",
+          "allow_all_keys": true,
+          "named_key_link_count": 0
+        },
+        {
+          "provider": "gpu0",
+          "allow_all_keys": false,
+          "named_key_link_count": 0
+        },
+        {
+          "provider": "gpu1",
+          "allow_all_keys": false,
+          "named_key_link_count": 0
+        },
+        {
+          "provider": "gpu0",
+          "allow_all_keys": true,
+          "named_key_link_count": 0
+        },
+        {
+          "provider": "gpu1",
+          "allow_all_keys": true,
+          "named_key_link_count": 0
+        },
+        {
+          "provider": "gpu0",
+          "allow_all_keys": false,
+          "named_key_link_count": 0
+        },
+        {
+          "provider": "gpu1",
+          "allow_all_keys": true,
+          "named_key_link_count": 0
+        },
+        {
+          "provider": "gpu2",
+          "allow_all_keys": false,
+          "named_key_link_count": 0
+        }
+      ]
+    },
+    "stale_boot_registry": {
+      "blocked_registered_names": [
+        "qwen38-vllm-gpu4",
+        "qwen38-vllm-gpu5",
+        "qwen38-vllm-gpu6",
+        "qwen38-vllm-gpu7"
+      ],
+      "no_recovery_action_invoked": true
+    },
+    "qwen_current_replicas": 2,
+    "qwen_current_total_max_sequences": 16,
+    "glm_max_sequences": 8,
+    "deepseek_max_sequences": 36,
+    "llm_d_containers_running_but_not_in_qwen_front_route": true,
+    "single_pool_metrics_sample_is_not_a_fleet_aggregate": true,
+    "production_mutated": false
+  },
+  "remaining": [
+    "production immutable registry, health, exact context/capability/quality policy and loader",
+    "signed Gateway no-dispatch financial handoff and one request across both actual frontends",
+    "shared image/cache compatibility",
+    "durable engine abort and unknown/crash financial recovery",
+    "native TCP pool stress Linux qualification",
+    "obsolete GPU4-7 boot recovery registration causing recurring failures",
+    "fixed Linux release/backup/restore/rollback and full routing cutover"
+  ],
+  "public_paid_harness_run": false,
+  "public_harness_exemption": "embedded runtime has no standalone CLI configuration path; actual canonical HTTP owned fixture used",
+  "log_sha256": {
+    "sw-target-funding-red.log": "24656cbecbe285b1758d3fdfba0c743fff3057b389d8a08633041ffaab166e15",
+    "sw-target-funding-core-red.log": "9904c967494c4fe8a839c22b304c22fc6e06fd3e28f3468f84bf449270960d3b",
+    "sw-target-funding-empty-keys-red.log": "07d24ab32ac0731b04e27a47a9d4fe5bf7f1aca22f168980ad1764bd151819e7",
+    "sw-target-funding-http-race.jsonl": "22b559345548c34f4900e34a712cbcddd48c75c68ce6d8cafcdb369318ae994b",
+    "sw-target-funding-keyless-http.jsonl": "ace8cbf5facb2578d5cd9ace0cf5d75accdd5918aa3ae8efd77cd62289d825f9",
+    "sw-target-funding-keyless-governance.jsonl": "9e9e892455caf8cb0dff70c0f75787e1c1753b021a98b41a9254a6f0f9fb28a5",
+    "sw-target-funding-frozen-core.jsonl": "1551a17a9ebe2d686685079cde51ad9f42efe0bd90bec9015f1c4efae378ba34",
+    "sw-target-funding-keyless-vet.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sw-target-funding-clippy.log": "51039eb8d150523ca53c310763f9eb54bb42722952ad844bec4e4ba9ed0336c6",
+    "sw-target-funding-cancel-repeat.log": "1bb5ab64cda926b60300cc52172d66ba5966c4489d4b00414c4c913625b8315c"
+  }
+}

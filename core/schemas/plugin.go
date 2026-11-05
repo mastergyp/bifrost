@@ -315,6 +315,62 @@ func (e *StreamInterceptionError) Error() string {
 	return "stream interception failed"
 }
 
+// ManagedInference is a deployment-owned dispatch boundary, rather than an
+// orderable plugin. Handle must validate the original Grant and return a response,
+// stream or fail-closed error for every owned inference. A streaming request
+// requires a stream with a final accounting chunk; a unary request a response.
+// Returning nil, multiple results or a mismatched result cannot
+// fall through to the original provider. ListModels is read-only and excluded.
+// Close stops admission, not accepted inference; core joins its post-hooks before
+// cleaning up plugins. Implementations must bound work and preserve accounting.
+type ManagedInference interface {
+	Owns(provider ModelProvider) bool
+	Handle(ctx *BifrostContext, request *BifrostRequest) *LLMPluginShortCircuit
+	Close()
+}
+
+// ContextManagedInference pins trusted ingress provenance independently of a
+// parser/plugin's provider selection. Required requests cannot escape through
+// an unowned provider and are tracked through shutdown like other managed work.
+type ContextManagedInference interface {
+	ManagedInference
+	RequiresManaged(ctx *BifrostContext) bool
+}
+
+// ManagedRequestSnapshot captures small original intent before PreRequestHook
+// or session routing mutates a request. Implementations must not retain payloads
+// in the context. HTTP ingress may supply an earlier authoritative snapshot.
+type ManagedRequestSnapshot interface {
+	CaptureRequest(ctx *BifrostContext, request *BifrostRequest)
+}
+
+// ManagedExecutionRoute contains only bounded registry-owned names, never a
+// payload or key value. The core accepts it only on a registered managed call.
+type ManagedExecutionRoute struct {
+	Requested Route
+	Resolved  Route
+	Foreign   bool
+}
+
+// RoutingInfo returns fresh small pointer fields, so a post-hook cannot mutate
+// the immutable selected target used by a later chunk or the core's restore.
+func (r ManagedExecutionRoute) RoutingInfo() RoutingInfo {
+	info := RoutingInfo{Provider: r.Resolved.Provider, Model: r.Requested.Model, IsFallback: r.Foreign,
+		ResolvedKeyAlias: &ResolvedKeyAlias{ModelID: r.Resolved.Model}}
+	if r.Foreign {
+		provider, model := r.Requested.Provider, r.Requested.Model
+		info.PrimaryProvider, info.PrimaryModel = &provider, &model
+	}
+	return info
+}
+
+// ManagedShortcutPolicy validates successful pre-hook/cache results without
+// dispatching inference. Unqualified replies must not bypass original-caller
+// or actual-target policy; ordinary pre-hook denials retain their original error.
+type ManagedShortcutPolicy interface {
+	ValidateShortcut(ctx *BifrostContext, request *BifrostRequest, result *LLMPluginShortCircuit) *BifrostError
+}
+
 type LLMPlugin interface {
 	BasePlugin
 
