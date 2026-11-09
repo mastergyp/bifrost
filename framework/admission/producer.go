@@ -262,6 +262,25 @@ func extractControls(raw []byte) (map[string]json.RawMessage, error) {
 	}
 	return controls, nil
 }
+
+// A managed operation owns an independent deadline so the 60-second admission
+// budget cannot truncate a long inference. That ownership must not detach the
+// native request from an explicit downstream disconnect, though: the transport
+// reports a closed client by cancelling caller with context.Canceled. Preserve
+// deadline independence, but stop the owned HTTP stream as soon as that signal
+// arrives so vLLM can abort work that no client can consume.
+func cancelOwnedWhenCallerLeaves(caller, owned *schemas.BifrostContext) {
+	go func() {
+		select {
+		case <-caller.Done():
+			if errors.Is(caller.Err(), context.Canceled) {
+				owned.Cancel()
+			}
+		case <-owned.Done():
+		}
+	}()
+}
+
 func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest) (result *schemas.LLMPluginShortCircuit) {
 	principal := AdmittedPrincipal(ctx)
 	if ctx == nil || r == nil || principal == nil || principal.source.Alias == "" {
@@ -325,6 +344,7 @@ func (p *Producer) Handle(ctx *schemas.BifrostContext, r *schemas.BifrostRequest
 		return producerError(400, "invalid managed preparation")
 	}
 	owned := schemas.NewBifrostContext(context.Background(), time.Now().Add(20*time.Minute))
+	cancelOwnedWhenCallerLeaves(ctx, owned)
 	owned.SetGrant(ctx.Grant())
 	owned.SetValue(schemas.BifrostContextKeyUseRawRequestBody, true)
 	wire.EnableManagedWireAccounting(owned)

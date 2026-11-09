@@ -202,9 +202,10 @@ func RequestDigest(api API, body []byte) (string, error) {
 }
 
 // Forward sends once to the fixed Unix sender, never to a caller-supplied URL.
-// ctx must belong to the bounded accounting operation, not just the downstream
-// socket. Its owner must consume through final usage after client disconnect;
-// closing this Body does not prove that GPU work or its quota obligation ended.
+// ctx belongs to the bounded managed operation rather than the short admission
+// budget. The producer links an explicit downstream cancellation into that
+// operation so closing the HTTP body can abort native work; already-observed
+// usage remains accountable, while unavailable terminal usage is never invented.
 // Transport errors are ambiguous and must never trigger inference replay.
 func (t *Ticket) Forward(ctx context.Context, api API, body []byte) (*ForwardResponse, error) {
 	if t == nil || t.client == nil || t.Lease.State != "prepared" || len(body) == 0 || len(body) > maxInferenceBytes {

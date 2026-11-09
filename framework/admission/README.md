@@ -87,22 +87,19 @@ waiting inference requests leave the two-second control path responsive. Owner
 headers remain private; response objects expose only status, an allowed set of
 routing/content headers and a bounded body, without request or trailer objects.
 
-The accounting operation must retain and consume that body through final usage
-when the external client disconnects. Passing the external socket's cancellation
-context or closing the body early would lose that financial information even
-though Rust safely keeps its physical lease. This transport does not implement
-that ownership transfer and cannot enable the currently disabled server fence.
+The accounting operation remains independent of the short admission deadline,
+but an explicit external-client cancellation is linked into its owned context.
+That signal closes the Unix inference body and lets the native provider abort work
+that no client can consume. Hooks retain usage already observed before cancellation;
+they do not fabricate terminal usage that the provider never delivered. Deadline
+expiry remains independent so a long inference is not confused with a disconnect.
 
-Core's short-circuit streaming path now keeps executing post-hooks after its
-consumer leaves. The previous blind drain lost late usage/error chunks. Red tests
-reproduced missing usage before the fix; race regressions cover cancellation before
-the first chunk, after the first chunk and a normal live consumer, preserving the
-captured request type after caller reuse. These tests prove hook delivery, not
-end-to-end governance charging or GPU abort. The change has no client-visible
-payload/status effect: it processes chunks after the client already disconnected;
-the generic provider HTTP harness cannot configure this test-only managed sender.
-Thus this increment is exempt from a paid wire harness case. Hook registration
-must add actual entrance/auth/usage wire regressions before release.
+Core's short-circuit streaming path continues running post-hooks until the managed
+producer terminates. A live consumer receives terminal usage normally; an abandoned
+consumer now cancels the owned inference hop, runs cancellation/finalization hooks
+for evidence already received, and releases the producer slot without replay. The
+generic provider HTTP harness cannot configure this private managed sender, so the
+real Unix HTTP regression in `framework/admission` is the executable wire boundary.
 
 `TestOwnedRustInferenceProtocol` is a second explicit opt-in compiled Go probe.
 The Rust owned fixture supplies one prepared synthetic request/body and socket in

@@ -1644,11 +1644,13 @@ func TestOwnedManagedIdleHarness(t *testing.T) {
 	server.Shutdown(closeCtx)
 }
 
-func ownedCoreBurstStream(t *testing.T, api API, idle time.Duration, loggers ...schemas.Logger) (*schemas.LLMPluginShortCircuit, *Producer, *schemas.BifrostContext, *ownedManagedTerminalHooks, func(), func()) {
+func ownedCoreBurstStream(t *testing.T, api API, idle time.Duration, loggers ...schemas.Logger) (*schemas.LLMPluginShortCircuit, *Producer, *schemas.BifrostContext, *ownedManagedTerminalHooks, func(), <-chan struct{}, func()) {
 	t.Helper()
 	release := make(chan struct{})
+	upstreamCancelled := make(chan struct{})
 	hooks := &ownedManagedTerminalHooks{}
 	var releaseOnce sync.Once
+	var cancelOnce sync.Once
 	allowTerminal := func() { releaseOnce.Do(func() { close(release) }) }
 	t.Cleanup(allowTerminal)
 	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -1683,7 +1685,12 @@ func ownedCoreBurstStream(t *testing.T, api API, idle time.Duration, loggers ...
 				}
 			}
 			w.(http.Flusher).Flush()
-			<-release
+			select {
+			case <-release:
+			case <-r.Context().Done():
+				cancelOnce.Do(func() { close(upstreamCancelled) })
+				return
+			}
 			if api == Chat {
 				fmt.Fprint(w, "data: {\"id\":\"owned\",\"object\":\"chat.completion.chunk\",\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":2,\"total_tokens\":7}}\n\ndata: [DONE]\n\n")
 			} else {
@@ -1726,7 +1733,7 @@ func ownedCoreBurstStream(t *testing.T, api API, idle time.Duration, loggers ...
 	if out == nil || out.Error != nil || out.Stream == nil {
 		t.Fatalf("owned dispatch rejected before timing check: %+v", out.Error)
 	}
-	return out, producer, ctx, hooks, allowTerminal, func() {
+	return out, producer, ctx, hooks, allowTerminal, upstreamCancelled, func() {
 		allowTerminal()
 		ctx.Cancel()
 		for range out.Stream {
@@ -1777,33 +1784,34 @@ func (h *ownedManagedTerminalHooks) PostLLMHook(ctx *schemas.BifrostContext, r *
 	return r, e, nil
 }
 
-// Real Core + managed Producer + Unix HTTP sender/SSE. Downstream abandonment
-// drains through the original terminal/accounting hook; it does not cancel
-// known native work or pretend that disconnect has ended GPU execution.
-func TestManagedCoreDrainsCallerCancellationWithoutLosingTerminalUsage(t *testing.T) {
+// Real Core + managed Producer + Unix HTTP sender/SSE. Once the downstream
+// caller leaves, the owned inference request must cancel the native HTTP hop
+// instead of draining a ghost generation just to recover terminal usage.
+func TestManagedCoreCancelsNativeRequestWhenCallerDisconnects(t *testing.T) {
 	for _, api := range []API{Chat, Responses} {
 		t.Run(string(api), func(t *testing.T) {
-			out, producer, ctx, hooks, allowTerminal, cleanup := ownedCoreBurstStream(t, api, time.Second)
+			out, producer, ctx, hooks, _, upstreamCancelled, cleanup := ownedCoreBurstStream(t, api, time.Second)
 			defer cleanup()
 			select {
 			case <-out.Stream:
 			case <-time.After(time.Second):
 				t.Fatal("first synthetic chunk missing")
 			}
-			// Stop reading and let the two forwarding buffers apply backpressure.
-			time.Sleep(30 * time.Millisecond)
 			ctx.Cancel()
-			time.Sleep(30 * time.Millisecond)
-			if producer.ActiveOperations() != 1 || hooks.calls.Load() != 0 {
-				t.Fatal("caller cancellation released native ownership before terminal")
+			select {
+			case <-upstreamCancelled:
+			case <-time.After(2 * time.Second):
+				t.Fatal("caller cancellation did not cancel native inference request")
 			}
-			allowTerminal()
 			deadline := time.Now().Add(2 * time.Second)
-			for (producer.ActiveOperations() != 0 || hooks.calls.Load() != 1 || hooks.tokens.Load() != 7) && time.Now().Before(deadline) {
+			for producer.ActiveOperations() != 0 && time.Now().Before(deadline) {
 				time.Sleep(time.Millisecond)
 			}
-			if producer.ActiveOperations() != 0 || hooks.calls.Load() != 1 || hooks.tokens.Load() != 7 {
-				t.Fatalf("abandoned caller stranded permit or lost terminal usage: active=%d final=%d tokens=%d", producer.ActiveOperations(), hooks.calls.Load(), hooks.tokens.Load())
+			if producer.ActiveOperations() != 0 {
+				t.Fatalf("cancelled caller stranded producer permit: active=%d", producer.ActiveOperations())
+			}
+			if hooks.tokens.Load() != 0 {
+				t.Fatalf("cancelled request fabricated terminal usage: final=%d tokens=%d", hooks.calls.Load(), hooks.tokens.Load())
 			}
 			if hooks.inferenceCalls.Load() != 1 {
 				t.Fatal("original native request replayed")
@@ -1813,6 +1821,29 @@ func TestManagedCoreDrainsCallerCancellationWithoutLosingTerminalUsage(t *testin
 			}
 			producer.leave()
 		})
+	}
+}
+
+func TestManagedOwnedOperationIgnoresCallerDeadline(t *testing.T) {
+	caller := schemas.NewBifrostContext(context.Background(), time.Now().Add(10*time.Millisecond))
+	owned := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
+	t.Cleanup(func() {
+		caller.Cancel()
+		owned.Cancel()
+	})
+	cancelOwnedWhenCallerLeaves(caller, owned)
+	select {
+	case <-caller.Done():
+	case <-time.After(time.Second):
+		t.Fatal("caller deadline did not expire")
+	}
+	if !errors.Is(caller.Err(), context.DeadlineExceeded) {
+		t.Fatalf("caller error = %v, want deadline exceeded", caller.Err())
+	}
+	select {
+	case <-owned.Done():
+		t.Fatal("caller deadline cancelled independent managed operation")
+	case <-time.After(50 * time.Millisecond):
 	}
 }
 
