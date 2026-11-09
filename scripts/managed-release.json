@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "app_revision": "0979610cc00de8827af7fd7f62cef6c404dde1f2",
-  "app_image": "sha256:33e040edbc7cfb6fc33aea943fdfc9a8bc18f603dce21f008bb817444bde5372",
-  "source": "487bb9dc36c8661e87cb91940c5b4e2707740b9c0cd46d389fc27a82d6fc12dd",
+  "app_revision": "01d01c49420ec370ab5a6df19ebd074a166805eb",
+  "app_image": "sha256:78fc4b7fc0b8041012757b12ed175bf1b156db89c2c8e9e3866da6bf02988de5",
+  "source": "788ab705a708b8a2c1cf282d7dae01418fea6fe1f12c92fde632ccede8af2b19",
   "source_image": "sha256:3f89bb8f2acf3eefb342fe68fef6d952298941debfc6f95d3c7d85d2ece59f06",
-  "purpose": "e2e-availability"
+  "purpose": "managed-cancel"
 }
