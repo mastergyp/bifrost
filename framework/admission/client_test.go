@@ -1651,6 +1651,7 @@ func ownedCoreBurstStream(t *testing.T, api API, idle time.Duration, loggers ...
 	hooks := &ownedManagedTerminalHooks{}
 	var releaseOnce sync.Once
 	var cancelOnce sync.Once
+	markUpstreamCancelled := func() { cancelOnce.Do(func() { close(upstreamCancelled) }) }
 	allowTerminal := func() { releaseOnce.Do(func() { close(release) }) }
 	t.Cleanup(allowTerminal)
 	client := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -1685,11 +1686,26 @@ func ownedCoreBurstStream(t *testing.T, api API, idle time.Duration, loggers ...
 				}
 			}
 			w.(http.Flusher).Flush()
-			select {
-			case <-release:
-			case <-r.Context().Done():
-				cancelOnce.Do(func() { close(upstreamCancelled) })
-				return
+			probe := time.NewTicker(20 * time.Millisecond)
+			defer probe.Stop()
+			waiting := true
+			for waiting {
+				select {
+				case <-release:
+					waiting = false
+				case <-r.Context().Done():
+					markUpstreamCancelled()
+					return
+				case <-probe.C:
+					if _, err := fmt.Fprint(w, ": cancellation-probe\n\n"); err != nil {
+						markUpstreamCancelled()
+						return
+					}
+					if err := http.NewResponseController(w).Flush(); err != nil {
+						markUpstreamCancelled()
+						return
+					}
+				}
 			}
 			if api == Chat {
 				fmt.Fprint(w, "data: {\"id\":\"owned\",\"object\":\"chat.completion.chunk\",\"model\":\"qwen\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":2,\"total_tokens\":7}}\n\ndata: [DONE]\n\n")
